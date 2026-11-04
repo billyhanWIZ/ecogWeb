@@ -47,6 +47,10 @@ sudo git clone https://github.com/billyhanWIZ/ecogWeb /opt/ecog
 cd /opt/ecog
 sudo bash deploy/setup.sh ecog.jnwiz.com <이메일> --check   # 점검만
 sudo bash deploy/setup.sh ecog.jnwiz.com <이메일>           # .env 를 만들고 멈춤 → DB 정보 채우기
+# 전용 DB 계정(ecog)에 테이블 단위 권한을 주려면 테이블이 먼저 있어야 한다. DB 관리자 계정으로:
+mariadb -u root -p smartgym < sql/001_new_tables.sql
+mariadb -u root -p smartgym -e "CREATE TABLE IF NOT EXISTS eg_schema_migrations (filename VARCHAR(100) NOT NULL PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci"
+# → 그다음 .env.example 주석의 GRANT 문 실행
 sudo bash deploy/setup.sh ecog.jnwiz.com <이메일>           # 다시 실행하면 설치 완료
 node scripts/migrate-legacy.js --dry-run                    # 이관 미리보기
 node scripts/migrate-legacy.js --admin-id admin --admin-pw '<초기 비밀번호>'
