@@ -16,12 +16,14 @@ const rnd = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-// 상위 그룹(upcode=0) = 시도, 하위 그룹 = 설치처
-const tops = { '경상남도': ['창원시청', '김해시청', '진주시청', '경남도청'], '인천광역시': ['인천시청', '연수구청'], '서울특별시': ['서울시청 본관'] };
+// 운영과 같은 3단계: 최상위(ecoG본사, upcode=0) → 시도 그룹 → 설치처 그룹. 장비는 설치처 그룹에 붙는다
+const [rootRes] = await conn.query("INSERT INTO eg_managegroup (groupname, upcode) VALUES ('ecoG본사', 0)");
+const rootSn = rootRes.insertId;
+const tops = { '경상남도': ['창원시', '김해시', '진주시', '경상국립대'], '인천광역시': ['서구', '청라관리자'], '서울특별시': ['코엑스'], '제주특별자치도': [], '전라북도': [] };
 const groupSn = {};
 const subs = [];
 for (const [top, children] of Object.entries(tops)) {
-  const [r] = await conn.query('INSERT INTO eg_managegroup (groupname, upcode) VALUES (?, 0)', [top]);
+  const [r] = await conn.query('INSERT INTO eg_managegroup (groupname, upcode) VALUES (?, ?)', [top, rootSn]);
   groupSn[top] = r.insertId;
   for (const c of children) {
     const [r2] = await conn.query('INSERT INTO eg_managegroup (groupname, upcode) VALUES (?, ?)', [c, r.insertId]);
@@ -30,7 +32,7 @@ for (const [top, children] of Object.entries(tops)) {
 }
 
 await conn.query(`INSERT INTO eg_userinfo (userid, username, password, managegroup, LEVEL) VALUES
-  ('ecog', '본사', 'ecog1234', 0, 0),
+  ('ecog', '본사', 'ecog1234', 1, 0),
   ('gyeongnam', '경상남도', 'gn1234', ?, 1),
   ('changwon', '창원시청', 'cw1234', ?, 2)`, [groupSn['경상남도'], subs[0].sn]);
 

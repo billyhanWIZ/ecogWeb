@@ -32,34 +32,56 @@ const say = (m) => { log.push(m); console.log(m); };
 
 await tx(async (run) => {
   // 1) 조직
-  let [root] = await run("SELECT sn FROM eg_org WHERE parent_sn IS NULL AND org_type='HQ' ORDER BY sn LIMIT 1");
-  if (!root) {
-    const r = await run("INSERT INTO eg_org (parent_sn, org_type, name) VALUES (NULL, 'HQ', ?)", [rootName]);
-    root = { sn: r.insertId };
-    say(`[조직] 최상위 '${rootName}' 생성 (sn=${root.sn})`);
-  }
+  //   구 구조: 최상위 그룹(upcode=0, 예: ecoG본사) → 시도 그룹 → 설치처 그룹
+  //   - 최상위 그룹이 하나면 그것을 새 트리의 최상위(HQ)로 쓰고, 여럿이면 rootName 으로 하나 만든다
+  //   - 유형: 시도 이름이면 지역(BRANCH), 하위가 있으면 BRANCH, 아니면 설치처(SITE)
+  //   - 시도 아래의 '○○시/군/구' 이름은 시군구로도 채운다
   const groups = await run('SELECT sn, groupname, upcode FROM eg_managegroup ORDER BY upcode, sn');
+  const exists = new Set(groups.map((g) => g.sn));
+  const isTopGroup = (g) => !g.upcode || !exists.has(g.upcode);
+  const hasChild = (g) => groups.some((x) => x.upcode === g.sn && x.sn !== g.sn);
+  const byLegacy = new Map(groups.map((g) => [g.sn, g]));
   const mapped = new Map((await run('SELECT sn, legacy_group_sn FROM eg_org WHERE legacy_group_sn IS NOT NULL'))
     .map((r) => [r.legacy_group_sn, r.sn]));
 
-  // 상위 그룹 먼저, 하위 그룹은 상위가 만들어진 뒤에
-  const pending = groups.filter((g) => !mapped.has(g.sn));
-  for (let pass = 0; pass < 5 && pending.length; pass++) {
-    for (let i = pending.length - 1; i >= 0; i--) {
-      const g = pending[i];
-      const isTop = !g.upcode;
-      const parentSn = isTop ? root.sn : mapped.get(g.upcode);
-      if (!isTop && !parentSn && groups.some((x) => x.sn === g.upcode)) continue; // 다음 패스에서
-      const type = isTop ? 'BRANCH' : 'SITE';
-      const sido = normalizeSido(g.groupname);
-      const r = await run(
-        'INSERT INTO eg_org (parent_sn, org_type, name, sido, legacy_group_sn) VALUES (?,?,?,?,?)',
-        [parentSn || root.sn, type, g.groupname, sido, g.sn]);
-      mapped.set(g.sn, r.insertId);
-      say(`[조직] ${type} '${g.groupname}' (구 그룹 ${g.sn} → ${r.insertId})${sido ? ` 시도=${sido}` : ''}`);
-      pending.splice(i, 1);
+  let [root] = await run("SELECT sn FROM eg_org WHERE parent_sn IS NULL AND org_type='HQ' ORDER BY sn LIMIT 1");
+  const tops = groups.filter(isTopGroup);
+  if (!root) {
+    if (tops.length === 1 && !mapped.has(tops[0].sn)) {
+      const r = await run("INSERT INTO eg_org (parent_sn, org_type, name, legacy_group_sn) VALUES (NULL, 'HQ', ?, ?)", [tops[0].groupname, tops[0].sn]);
+      root = { sn: r.insertId };
+      mapped.set(tops[0].sn, r.insertId);
+      say(`[조직] 최상위 '${tops[0].groupname}' (구 그룹 ${tops[0].sn} → ${r.insertId})`);
+    } else {
+      const r = await run("INSERT INTO eg_org (parent_sn, org_type, name) VALUES (NULL, 'HQ', ?)", [rootName]);
+      root = { sn: r.insertId };
+      say(`[조직] 최상위 '${rootName}' 생성 (sn=${root.sn})`);
     }
   }
+
+  // 상위 그룹 먼저, 하위 그룹은 상위가 만들어진 뒤에
+  const pending = groups.filter((g) => !mapped.has(g.sn));
+  for (let pass = 0; pass < 6 && pending.length; pass++) {
+    for (let i = 0; i < pending.length; i++) {
+      const g = pending[i];
+      const parentSn = isTopGroup(g) ? root.sn : mapped.get(g.upcode);
+      if (!parentSn) continue; // 상위가 아직 안 만들어짐 → 다음 패스
+      const sido = normalizeSido(g.groupname);
+      const parentGroup = byLegacy.get(g.upcode);
+      const parentSido = parentGroup ? normalizeSido(parentGroup.groupname) : null;
+      const sigungu = !sido && parentSido && /^[가-힣]{1,6}(시|군|구)$/.test(g.groupname.trim()) ? g.groupname.trim() : null;
+      const type = sido || hasChild(g) ? 'BRANCH' : 'SITE';
+      const r = await run(
+        'INSERT INTO eg_org (parent_sn, org_type, name, sido, sigungu, legacy_group_sn) VALUES (?,?,?,?,?,?)',
+        [parentSn, type, g.groupname, sido, sigungu, g.sn]);
+      mapped.set(g.sn, r.insertId);
+      const parentName = parentGroup ? parentGroup.groupname : '(최상위)';
+      say(`[조직] ${type === 'BRANCH' ? '지역' : '설치처'} '${g.groupname}' ← ${parentName} (구 그룹 ${g.sn} → ${r.insertId})${sido ? ` 시도=${sido}` : ''}${sigungu ? ` 시군구=${sigungu}` : ''}`);
+      pending.splice(i, 1);
+      i--;
+    }
+  }
+  if (pending.length) say(`[조직] 상위를 찾지 못해 건너뜀: ${pending.map((g) => `${g.groupname}(${g.sn})`).join(', ')}`);
 
   // 2) 장비 배정
   const devs = await run(`
@@ -81,6 +103,12 @@ await tx(async (run) => {
     assigned++;
   }
   say(`[장비] 배정 ${assigned}대 이관${skipped ? `, 그룹을 찾지 못해 건너뜀 ${skipped}대` : ''}`);
+  const [un] = await run(`SELECT COUNT(*) n FROM eg_deviceinfo i WHERE NOT EXISTS
+    (SELECT 1 FROM eg_device_site a WHERE a.deviceid = i.deviceid AND a.removed_on IS NULL)`);
+  say(`[장비] 그룹이 없는 장비 ${un.n}대는 '미배정'으로 남습니다 (장비 화면에서 배정)`);
+  const perGroup = await run(`SELECT o.name, COUNT(*) n FROM eg_device_site a JOIN eg_org o ON o.sn = a.site_sn
+    WHERE a.removed_on IS NULL GROUP BY o.name ORDER BY n DESC`);
+  say(`[장비] 설치처별: ${perGroup.map((x) => `${x.name} ${x.n}`).join(', ')}`);
 
   // 3) 사용자
   const users = await run(`SELECT u.* FROM eg_userinfo u

@@ -15,5 +15,5 @@
 
 ## 확인 방법
 - `node dev/seed-legacy.js && npm run migrate && node scripts/migrate-legacy.js --admin-pw admin1234` 로 로컬 데이터 준비
-- 계정: admin/admin1234(시스템), ecog/ecog1234(고객 관리자), gyeongnam/gn1234, changwon/cw1234(조회자)
+- 계정: admin/admin1234(시스템), ecog/ecog1234(고객 관리자), gyeongnam/gn1234(경상남도), changwon/cw1234(창원시) 조회자
 - 화면을 바꾸면 Playwright 로 스크린샷을 찍어 확인한다.
