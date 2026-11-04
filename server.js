@@ -69,6 +69,7 @@ const pub = path.join(config.root, 'public');
 // 사진·로고·지도·라이브러리처럼 거의 안 바뀌는 파일만 하루 캐시.
 app.use(express.static(pub, {
   index: false,
+  cacheControl: false, // 아래 setHeaders 값을 그대로 쓰게
   setHeaders: (res, file) => {
     if (/\.(js|css|html)$/.test(file) && !file.includes(`${path.sep}vendor${path.sep}`)) res.setHeader('Cache-Control', 'no-cache');
     else res.setHeader('Cache-Control', config.isProd ? 'public, max-age=86400' : 'no-cache');
