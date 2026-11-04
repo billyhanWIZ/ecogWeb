@@ -8,6 +8,7 @@ import { dailyUsage, signalStatus, currentDevices, cumulativeUses } from '../lib
 import { getSettings, impact } from '../lib/settings.js';
 import { todayKST, addDays, eachDay } from '../lib/dates.js';
 import { q, one } from '../db.js';
+import { orgLocation, weatherFor } from '../lib/weather.js';
 import { config } from '../config.js';
 
 const r = Router();
@@ -62,6 +63,7 @@ async function compute(token) {
   for (const d of daily) byDay.set(d.d, (byDay.get(d.d) || 0) + d.cnt);
 
   const cumUses = cumHit.uses;
+  const weather = await weatherFor(orgLocation(tree, org.sn)).catch(() => null);
   const data = {
     name: org.name,
     logo: inherited(tree, org.sn, 'logo_path') ? `/api/signage/${token}/logo` : '/img/ecog-logo-white.png',
@@ -75,6 +77,7 @@ async function compute(token) {
     devices: current.length,
     online,
     last14: eachDay(from14, today).map((d) => ({ d, uses: byDay.get(d) || 0 })),
+    weather,
     updatedAt: new Date(Date.now() + 9 * 3600_000).toISOString().slice(11, 16),
   };
   return data;

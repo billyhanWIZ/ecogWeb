@@ -43,7 +43,7 @@ export default async function orgs(view, { params }) {
     const err = h('p', { class: 'err hidden' });
     const form = h('form', { onsubmit: (e) => save(e).catch((ex) => { err.textContent = ex.message; err.classList.remove('hidden'); }) },
       h('div', { class: 'row' }, field('이름', name), field('유형', type)),
-      h('div', { class: 'row' }, field('시도', sido, '지역 통계와 지도에 쓰입니다'), field('시군구', sigungu)),
+      h('div', { class: 'row' }, field('시도', sido, '지역 통계와 지도에 쓰입니다'), field('시군구', sigungu, 'TV 화면 날씨 위치로도 쓰입니다')),
       field('주소', address),
       h('div', { class: 'row' }, field('담당자', mgr), field('연락처', phone)),
       err,

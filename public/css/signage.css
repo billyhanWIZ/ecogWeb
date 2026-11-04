@@ -16,8 +16,14 @@ header { display: flex; align-items: center; gap: 1.4vw; font-size: 1.7vw; color
   background: rgba(19, 66, 38, .8); padding: .7vw .6vw .6vw; border-radius: .7vw;
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
 }
-.clock b { display: block; font-size: 2.5vw; font-weight: 650; letter-spacing: 0.02em; }
-.clock small { display: block; color: #C4D9C6; font-size: 1vw; margin-top: .2vw; }
+.clock time b { display: block; font-size: 2.5vw; font-weight: 650; letter-spacing: 0.02em; }
+.clock time small { display: block; color: #C4D9C6; font-size: 1vw; margin-top: .2vw; }
+.wx { display: flex; align-items: center; justify-content: center; gap: .55vw; margin-top: .55vw; padding-top: .55vw; border-top: 1px solid rgba(196, 217, 198, .28); }
+.wx[hidden] { display: none; }
+.wx-icon { width: 2.6vw; height: 2.6vw; flex: none; }
+.wx b { font-size: 2.1vw; font-weight: 650; }
+.wx span { font-size: 1vw; color: #DDEBDD; text-align: left; line-height: 1.25; }
+.wx small { display: block; color: #A9C2AB; font-size: .85vw; }
 header img { height: 3.6vw; max-width: 18vw; object-fit: contain; }
 header img.custom { background: #fff; border-radius: .6vw; padding: .35vw .8vw; height: 3.4vw; }
 .sg > *:not(.photo) { position: relative; z-index: 1; }
@@ -49,7 +55,8 @@ footer { display: flex; justify-content: space-between; font-size: 1.15vw; color
   html, body { overflow: auto; }
   .sg { height: auto; min-height: 100%; padding: 6vw 6vw 10vw; gap: 6vw; }
   header { font-size: 4vw; flex-wrap: wrap; } header img { height: 9vw; max-width: 40vw; }
-  .clock { position: static; width: auto; margin-left: auto; text-align: right; background: none; padding: 0; -webkit-backdrop-filter: none; backdrop-filter: none; } .clock b { font-size: 7vw; } .clock small { font-size: 3vw; }
+  .clock { position: static; width: auto; margin-left: auto; text-align: right; background: none; padding: 0; -webkit-backdrop-filter: none; backdrop-filter: none; } .clock time b { font-size: 7vw; } .clock time small { font-size: 3vw; }
+  .wx { justify-content: flex-end; border-top: 0; gap: 1.5vw; } .wx-icon { width: 8vw; height: 8vw; } .wx b { font-size: 6vw; } .wx span { font-size: 3vw; } .wx small { font-size: 2.6vw; }
   .lead, .sub { font-size: 4.6vw; } .big { font-size: 13vw; }
   .facts { grid-template-columns: 1fr 1fr; gap: 5vw; }
   .facts b { font-size: 8vw; } .facts span { font-size: 3.4vw; }
