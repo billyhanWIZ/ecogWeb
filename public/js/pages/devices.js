@@ -95,7 +95,7 @@ export default async function devices(view, { params }) {
     h('div', { class: 'head' }, h('div', null, h('h1', null, '장비')), search),
     tabs,
     h('p', { class: 'muted', style: { margin: '0 0 12px', fontSize: '14px' } }, help),
-    bulkBar,
+    bulkBar || '',
     h('section', { class: 'panel' }, h('div', { class: 'body tablewrap', style: { paddingTop: '10px' } }, d.devices.length
       ? h('table', { class: 't' },
         h('thead', null, h('tr', null, selectable ? h('th') : null, h('th', null, '장비'), h('th', null, '설치처'), h('th', null, '상태'),
