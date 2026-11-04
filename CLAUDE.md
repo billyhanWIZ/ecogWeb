@@ -12,6 +12,8 @@
 - 조회 범위는 세션 사용자에서만 정한다. 요청 파라미터의 조직은 `scopedSubtree` 로 범위 확인 후 쓴다.
 - 화면은 빌드 없는 ES 모듈. 인라인 스크립트 금지(CSP). 외부 라이브러리는 public/vendor 에 둔다.
 - 비밀값은 .env 에만. 커밋하지 않는다.
+- 새 테이블을 만들면 README·.env.example 의 GRANT 목록에도 추가한다 (운영은 테이블 단위 권한).
+- 디자인: eco.G 로고 색(숲 초록 #134226/#1F7A45, 새잎 연두 #88BC50). 로고·사진은 public/img. 모바일(860px 이하)은 위쪽 막대 + 펼치는 메뉴.
 
 ## 확인 방법
 - `node dev/seed-legacy.js && npm run migrate && node scripts/migrate-legacy.js --admin-pw admin1234` 로 로컬 데이터 준비

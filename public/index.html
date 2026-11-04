@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ecoG 세척기 모니터링</title>
-  <link rel="icon" href="/img/ecog-logo.svg">
+  <title>eco.G 텀블러 세척기 모니터링</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <meta name="theme-color" content="#134226">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css">
   <link rel="stylesheet" href="/css/app.css">
   <script src="/vendor/echarts.min.js" defer></script>
@@ -13,7 +15,12 @@
 <body>
   <div class="shell">
     <aside class="side">
-      <div class="brand"><img id="logo" src="/img/ecog-logo.svg" alt="로고"></div>
+      <div class="brand">
+        <img id="logo" src="/img/ecog-logo-white.png" alt="eco.G">
+        <button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="nav">
+          <svg width="18" height="14" viewBox="0 0 18 14" aria-hidden="true"><path d="M0 1h18M0 7h18M0 13h18" stroke="currentColor" stroke-width="2"/></svg>메뉴
+        </button>
+      </div>
       <nav id="nav" aria-label="메뉴">
         <a href="#/dashboard" data-page="dashboard">대시보드</a>
         <a href="#/stats" data-page="stats">통계</a>

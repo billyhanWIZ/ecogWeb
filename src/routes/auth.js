@@ -40,7 +40,8 @@ r.get('/me', requireAuth, wrap(async (req, res) => {
       mustChangePassword: req.user.must_change_pw === 'Y',
     },
     org: home ? { sn: home.sn, name: home.name } : null,
-    logo: home && inherited(tree, home.sn, 'logo_path') ? `/api/orgs/${home.sn}/logo` : '/img/ecog-logo.svg',
+    logo: home && inherited(tree, home.sn, 'logo_path') ? `/api/orgs/${home.sn}/logo` : '/img/ecog-logo-white.png',
+    logoCustom: !!(home && inherited(tree, home.sn, 'logo_path')),
     settings: { co2PerUseG: s.co2_per_use_g, co2PerTreeKg: s.co2_per_tree_kg, offlineSeconds: s.offline_seconds },
   });
 }));

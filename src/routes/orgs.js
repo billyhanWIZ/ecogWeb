@@ -9,6 +9,8 @@ import { normalizeSido, SIDO } from '../lib/regions.js';
 import { audit } from '../lib/audit.js';
 import { q, exec, one } from '../db.js';
 import { config } from '../config.js';
+import crypto from 'node:crypto';
+import { clearSignageCache } from './signage.js';
 
 const r = Router();
 const TYPES = ['HQ', 'BRANCH', 'SITE'];
@@ -167,6 +169,31 @@ r.delete('/orgs/:sn/logo', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req
   res.json({ ok: true });
 }));
 
+/** 사이니지 링크 발급(새로 발급하면 이전 링크는 끊긴다)·폐기 */
+r.post('/orgs/:sn/signage', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
+  const tree = await loadOrgs();
+  const sn = Number(req.params.sn);
+  if (!tree.byId.has(sn)) throw httpError(404, '조직을 찾을 수 없습니다');
+  assertEditable(tree, req.user, sn);
+  const token = crypto.randomBytes(18).toString('base64url');
+  await exec('UPDATE eg_org SET signage_token = ? WHERE sn = ?', [token, sn]);
+  invalidateOrgs();
+  clearSignageCache();
+  await audit(req, 'signage.issue', 'org', sn);
+  res.json({ ok: true, token });
+}));
+
+r.delete('/orgs/:sn/signage', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
+  const tree = await loadOrgs();
+  const sn = Number(req.params.sn);
+  assertEditable(tree, req.user, sn);
+  await exec('UPDATE eg_org SET signage_token = NULL WHERE sn = ?', [sn]);
+  invalidateOrgs();
+  clearSignageCache();
+  await audit(req, 'signage.revoke', 'org', sn);
+  res.json({ ok: true });
+}));
+
 /** 로고 (자기 것이 없으면 상위 조직 것, 그래도 없으면 기본 로고) */
 r.get('/orgs/:sn/logo', requireAuth, wrap(async (req, res) => {
   const tree = await loadOrgs();
@@ -174,7 +201,7 @@ r.get('/orgs/:sn/logo', requireAuth, wrap(async (req, res) => {
   if (req.user.role !== 'SYSADMIN' && !userScope(tree, req.user).has(sn)) throw httpError(404, '없음');
   const file = inherited(tree, sn, 'logo_path');
   const full = file ? path.join(logoDir, path.basename(file)) : null;
-  if (!full || !fs.existsSync(full)) return res.redirect('/img/ecog-logo.svg');
+  if (!full || !fs.existsSync(full)) return res.redirect('/img/ecog-logo.png');
   res.setHeader('Cache-Control', 'private, max-age=300');
   res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox"); // SVG 안 스크립트 차단
   res.sendFile(full);

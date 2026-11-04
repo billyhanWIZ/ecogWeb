@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>텀블러 세척기 — eco.G</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css">
+  <link rel="stylesheet" href="/css/signage.css">
+  <script type="module" src="/js/signage.js"></script>
+</head>
+<body>
+  <main id="sg" class="sg" aria-live="polite">
+    <header>
+      <img id="logo" src="/img/ecog-logo-white.png" alt="">
+      <span id="name"></span>
+    </header>
+    <section class="hero">
+      <p class="lead">올해 이 텀블러 세척기로</p>
+      <p class="big"><span id="year">–</span>번 씻었습니다</p>
+      <p class="sub">일회용컵 <b id="cups">–</b>개를 쓰지 않은 셈입니다</p>
+    </section>
+    <section class="facts">
+      <div><b id="today">–</b><span>오늘</span></div>
+      <div><b id="month">–</b><span>이번 달</span></div>
+      <div><b id="co2">–</b><span>설치 이후 줄인 탄소</span></div>
+      <div><b id="trees">–</b><span>소나무가 1년 동안 흡수하는 양</span></div>
+    </section>
+    <div class="photo" aria-hidden="true"></div>
+    <section class="days" aria-label="최근 14일 사용 횟수">
+      <div id="bars" class="bars"></div>
+    </section>
+    <footer>
+      <span>텀블러를 씻어 쓰면 일회용컵 하나가 줄어듭니다</span>
+      <span id="updated"></span>
+    </footer>
+  </main>
+  <div id="err" class="err" hidden>화면을 불러오지 못했습니다. 링크가 바뀌었는지 관리자에게 확인하세요.</div>
+</body>
+</html>

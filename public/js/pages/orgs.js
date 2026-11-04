@@ -1,8 +1,8 @@
 import { api, go } from '../app.js';
 import { h, fmt, modal, field, toast } from '../ui.js';
-import { loadOrgTree, invalidateOrgTree, pickOrg, flatten } from './org-picker.js';
+import { loadOrgTree, invalidateOrgTree, pickOrg, flatten, orgTree } from './org-picker.js';
 
-const TYPE = { HQ: '본사', BRANCH: '지사·지역', SITE: '설치처' };
+const TYPE = { HQ: '본사', BRANCH: '지역·지사', SITE: '설치처' };
 
 export default async function orgs(view, { params }) {
   const data = await loadOrgTree(true);
@@ -10,15 +10,7 @@ export default async function orgs(view, { params }) {
   const selected = all.find((x) => x.sn === Number(params.sn)) || all[0];
   const reload = (sn) => { invalidateOrgTree(); go('orgs', { sn }, { replace: true }); };
 
-  const tree = h('ul', { class: 'tree' });
-  const node = (o) => h('li', null,
-    h('div', {
-      class: 'node', tabindex: '0', role: 'treeitem', 'aria-selected': String(o.sn === selected?.sn),
-      onclick: () => go('orgs', { sn: o.sn }),
-      onkeydown: (e) => { if (e.key === 'Enter') go('orgs', { sn: o.sn }); },
-    }, h('span', { class: 'type' }, TYPE[o.org_type] || o.org_type), o.name, h('span', { class: 'cnt' }, o.devicesTotal ? `${o.devicesTotal}대` : '')),
-    o.children.length ? h('ul', null, o.children.map(node)) : null);
-  data.roots.forEach((r) => tree.append(node(r)));
+  const tree = orgTree(data.roots, { selectedSn: selected?.sn, onSelect: (o) => go('orgs', { sn: o.sn }), showType: true });
 
   const left = h('section', { class: 'panel' },
     h('header', null, h('h2', null, '조직'), data.canEdit && selected ? h('button', { class: 'btn small primary', onclick: () => addChild(selected.org) }, '하위 조직 추가') : null),
@@ -27,8 +19,8 @@ export default async function orgs(view, { params }) {
   const right = selected ? detail(selected.org) : h('div');
   view.replaceChildren(
     h('div', { class: 'head' }, h('div', null, h('h1', null, '조직'),
-      h('p', { class: 'faint', style: { margin: '2px 0 0', fontSize: '13px' } }, '고객사 → 지사·지역 → 설치처 순으로 묶습니다. 장비는 설치처에 배정합니다.'))),
-    h('div', { class: 'grid', style: { gridTemplateColumns: 'minmax(260px, 1fr) 1.4fr', alignItems: 'start' } }, left, right));
+      h('p', { class: 'faint', style: { margin: '2px 0 0', fontSize: '13px' } }, '본사 → 지역 → 설치처 순으로 묶습니다. +/− 로 펼치고 접을 수 있고, 장비는 설치처에 배정합니다.'))),
+    h('div', { class: 'grid g-tree', style: { gridTemplateColumns: 'minmax(280px, 1fr) 1.4fr', alignItems: 'start' } }, left, right));
 
   function detail(o) {
     const editable = data.canEdit;
@@ -75,7 +67,7 @@ export default async function orgs(view, { params }) {
     const logo = h('section', { class: 'panel' },
       h('header', null, h('h2', null, '로고'), h('p', null, '비워 두면 상위 조직 로고를 씁니다. 화면 왼쪽 위와 PDF 표지에 들어갑니다.')),
       h('div', { class: 'body', style: { display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' } },
-        h('img', { src: o.logoUrl || '/img/ecog-logo.svg', alt: `${o.name} 로고`, style: { height: '44px', maxWidth: '200px', objectFit: 'contain', border: '1px solid var(--line)', borderRadius: '6px', padding: '4px 8px', background: '#fff' } }),
+        h('img', { src: o.logoUrl || '/img/ecog-logo.png', alt: `${o.name} 로고`, style: { height: '44px', maxWidth: '200px', objectFit: 'contain', border: '1px solid var(--line)', borderRadius: '6px', padding: '4px 8px', background: '#fff' } }),
         editable ? h('button', { class: 'btn small', type: 'button', onclick: () => file.click() }, '로고 올리기') : null,
         editable && o.logo_path ? h('button', { class: 'btn small danger', type: 'button', onclick: async () => { await api(`/api/orgs/${o.sn}/logo`, { method: 'DELETE' }); reload(o.sn); } }, '이 조직 로고 지우기') : null,
         h('span', { class: 'faint', style: { fontSize: '12.5px' } }, 'PNG·JPG·SVG, 1MB 이하'), file));
@@ -85,9 +77,29 @@ export default async function orgs(view, { params }) {
       h('div', { class: 'body' }, h('p', { class: 'muted', style: { margin: 0, fontSize: '14px' } },
         o.devices ? `이 조직에 바로 배정된 장비 ${o.devices}대, 하위 조직 포함 ${o.devicesTotal}대입니다.` : `하위 조직 포함 ${o.devicesTotal}대입니다. 장비 배정은 장비 화면에서 합니다.`)));
 
+    // 사이니지 (로비 TV·QR 용 로그인 없는 화면)
+    const url = o.signage_token ? `${location.origin}/s/${o.signage_token}` : null;
+    const issue = async () => {
+      try { await api(`/api/orgs/${o.sn}/signage`, { method: 'POST' }); toast(url ? '새 링크를 만들었습니다. 이전 링크는 더 이상 열리지 않습니다' : '사이니지 링크를 만들었습니다'); reload(o.sn); } catch (ex) { toast(ex.message); }
+    };
+    const revoke = async () => {
+      try { await api(`/api/orgs/${o.sn}/signage`, { method: 'DELETE' }); toast('사이니지 링크를 껐습니다'); reload(o.sn); } catch (ex) { toast(ex.message); }
+    };
+    const signage = h('section', { class: 'panel' },
+      h('header', null, h('h2', null, '사이니지 화면'), h('p', null, '로비 TV나 QR로 여는 화면입니다. 로그인 없이 이 조직의 합계 숫자만 보입니다.')),
+      h('div', { class: 'body' }, url
+        ? [h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } },
+          h('input', { class: 'input', value: url, readonly: true, style: { flex: '1 1 260px' }, onfocus: (e) => e.target.select() }),
+          h('button', { class: 'btn small', type: 'button', onclick: () => navigator.clipboard?.writeText(url).then(() => toast('링크를 복사했습니다')) }, '복사'),
+          h('a', { class: 'btn small', href: url, target: '_blank', rel: 'noopener' }, '열기')),
+        editable ? h('div', { style: { display: 'flex', gap: '8px', marginTop: '10px' } },
+          h('button', { class: 'btn small', type: 'button', onclick: issue }, '새 링크로 바꾸기'),
+          h('button', { class: 'btn small danger', type: 'button', onclick: revoke }, '끄기')) : null]
+        : editable ? h('button', { class: 'btn small primary', type: 'button', onclick: issue }, '사이니지 링크 만들기') : h('p', { class: 'muted' }, '아직 링크가 없습니다')));
+
     return h('div', { class: 'grid' },
       h('section', { class: 'panel' }, h('header', null, h('h2', null, selected.path)), h('div', { class: 'body' }, form)),
-      logo, devs);
+      logo, devs, signage);
   }
 
   function addChild(parent) {

@@ -85,12 +85,12 @@ export default async function stats(view, { params }) {
 
   const labels = d.series.buckets.map((b) => bucketLabel(b, d.unit));
   const c = await chart(chartEl, {
-    legend: { top: 0, right: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: '#4A6670' } },
+    legend: { top: 0, right: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: '#4D6152' } },
     grid: { left: 8, right: 16, top: 34, bottom: 8, containLabel: true },
     xAxis: { type: 'category', data: labels, ...axisStyle, splitLine: { show: false } },
     yAxis: { type: 'value', ...axisStyle, minInterval: 1 },
     series: [
-      { type: 'bar', name: '전체', data: d.series.total, barMaxWidth: 26, itemStyle: { color: '#D6E9F1', borderRadius: [3, 3, 0, 0] } },
+      { type: 'bar', name: '전체', data: d.series.total, barMaxWidth: 26, itemStyle: { color: '#D9ECD9', borderRadius: [3, 3, 0, 0] } },
       ...(d.series.lines.length > 1 ? d.series.lines.map((l) => ({ type: 'line', name: l.label, data: l.values, symbol: 'none', smooth: false, lineStyle: { width: 2 } })) : []),
     ],
   });

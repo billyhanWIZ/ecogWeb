@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 36" role="img" aria-label="ecoG">
-  <path d="M14 4c6 7 10 12 10 17a10 10 0 0 1-20 0c0-5 4-10 10-17z" fill="#1C7FA6"/>
-  <path d="M10 22c2 3 6 4 9 2" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-  <text x="32" y="26" font-family="Wanted Sans, Pretendard, system-ui, sans-serif" font-size="22" font-weight="700" fill="#0E2A33" letter-spacing="-0.5">ecoG</text>
-</svg>

@@ -37,8 +37,11 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
   if (req.user.role === 'SYSADMIN' && !req.query.org) {
     unassigned = await q(
       `SELECT i.deviceid, NULL site_sn, NULL display_name, NULL installed_on, NULL location_note, i.devicename,
-              DATE_FORMAT(i.lastsignaldt,'%Y-%m-%d %H:%i:%s') lastsignaldt, GREATEST(TIMESTAMPDIFF(SECOND, i.lastsignaldt, NOW()), 0) ago
+              DATE_FORMAT(i.lastsignaldt,'%Y-%m-%d %H:%i:%s') lastsignaldt, GREATEST(TIMESTAMPDIFF(SECOND, i.lastsignaldt, NOW()), 0) ago,
+              DATE_FORMAT(h.hidden_at,'%Y-%m-%d %H:%i') hidden_at, h.reason hidden_reason,
+              (h.deviceid IS NOT NULL AND i.lastsignaldt > h.hidden_at) signal_after_hide
        FROM eg_deviceinfo i
+       LEFT JOIN eg_device_hidden h ON h.deviceid = i.deviceid
        WHERE NOT EXISTS (SELECT 1 FROM eg_device_site a WHERE a.deviceid = i.deviceid AND a.removed_on IS NULL)`);
   }
   const all = [...assigned, ...unassigned];
@@ -83,6 +86,10 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
       last30,
       avg14: Math.round(avg14 * 10) / 10,
       drop: (m.get(yesterday) || 0) === 0 && avg14 >= s.drop_min_avg,
+      hidden: !!d.hidden_at,
+      hiddenAt: d.hidden_at || null,
+      hiddenReason: d.hidden_reason || null,
+      signalAfterHide: !!Number(d.signal_after_hide || 0),
     };
   });
 
@@ -91,12 +98,14 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
     online: list.filter((d) => d.assigned && d.status === 'online').length,
     offline: list.filter((d) => d.assigned && d.status !== 'online').length,
     drop: list.filter((d) => d.assigned && d.drop).length,
-    unassigned: list.filter((d) => !d.assigned).length,
+    unassigned: list.filter((d) => !d.assigned && !d.hidden).length,
+    hidden: list.filter((d) => d.hidden).length,
   };
   const st = req.query.status || 'all';
   const kw = String(req.query.q || '').trim().toLowerCase();
   const filtered = list.filter((d) => {
-    if (st === 'unassigned') { if (d.assigned) return false; }
+    if (st === 'hidden') { if (!d.hidden) return false; }
+    else if (st === 'unassigned') { if (d.assigned || d.hidden) return false; }
     else {
       if (!d.assigned) return false;
       if (st === 'online' && d.status !== 'online') return false;
@@ -106,6 +115,7 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
     if (kw && !`${d.deviceid} ${d.name} ${d.sitePath || ''} ${d.locationNote || ''}`.toLowerCase().includes(kw)) return false;
     return true;
   }).sort((a, b) => {
+    if (st === 'hidden') return String(b.hiddenAt).localeCompare(String(a.hiddenAt));
     if (st === 'unassigned' || st === 'offline') return (a.ago ?? 1e12) - (b.ago ?? 1e12);
     return b.last30 - a.last30;
   });
@@ -162,6 +172,9 @@ r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
     siteAvg = { devices: new Set(assign.map((a) => a.deviceid)).size, perDeviceDay: dd ? sd.reduce((x, y) => x + y.cnt, 0) / dd : 0 };
   }
   const total = await one('SELECT COALESCE(SUM(c),0) uses FROM (SELECT MAX(cleancount) c FROM eg_cleancount WHERE deviceid = ? GROUP BY cleandate) x', [info.deviceid]);
+  const hidden = req.user.role === 'SYSADMIN'
+    ? await one("SELECT DATE_FORMAT(hidden_at,'%Y-%m-%d %H:%i') hidden_at, reason FROM eg_device_hidden WHERE deviceid = ?", [info.deviceid])
+    : null;
 
   res.json({
     device: {
@@ -173,6 +186,7 @@ r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
       status: statusOf(info.ago, s),
       current: cur ? { ...cur, sitePath: pathName(tree, cur.site_sn, viewRoot) } : null,
       totalUses: Number(total.uses),
+      hidden: hidden ? { at: hidden.hidden_at, reason: hidden.reason } : null,
     },
     history: hist.map((h) => ({ ...h, sitePath: tree.byId.has(h.site_sn) ? pathName(tree, h.site_sn, viewRoot) : `(삭제된 조직 ${h.site_sn})` })),
     period,
@@ -228,6 +242,7 @@ r.post('/devices/:id/assign', requireRole('SYSADMIN'), wrap(async (req, res) => 
     await run('INSERT INTO eg_device_site (deviceid, site_sn, display_name, installed_on, location_note, memo, created_by) VALUES (?,?,?,?,?,?,?)',
       [deviceid, Number(siteSn), displayName?.trim() || cur?.display_name || info.devicename || null, day, locationNote?.trim() || null, memo?.trim() || null, req.user.sn]);
     await syncLegacyGroup(run, tree, deviceid, Number(siteSn));
+    await run('DELETE FROM eg_device_hidden WHERE deviceid = ?', [deviceid]); // 배정하면 숨김 해제
   });
   await audit(req, 'device.assign', 'device', deviceid, { siteSn, installedOn: day });
   res.json({ ok: true });
@@ -247,6 +262,30 @@ r.post('/devices/:id/unassign', requireRole('SYSADMIN'), wrap(async (req, res) =
   });
   await audit(req, 'device.unassign', 'device', deviceid, { removedOn: day });
   res.json({ ok: true });
+}));
+
+/** 목록에서 숨기기 (여러 대). 설치처에 배정된 장비는 먼저 철거해야 한다. 장비 테이블은 건드리지 않는다 */
+r.post('/devices/hide', requireRole('SYSADMIN'), wrap(async (req, res) => {
+  const ids = [...new Set((req.body?.deviceids || []).map(String))].slice(0, 500);
+  if (!ids.length) throw httpError(400, '숨길 장비를 고르세요');
+  const reason = String(req.body?.reason || '').trim().slice(0, 200) || null;
+  const assigned = await q('SELECT DISTINCT deviceid FROM eg_device_site WHERE removed_on IS NULL AND deviceid IN (?)', [ids]);
+  if (assigned.length) throw httpError(400, `설치처에 배정된 장비는 먼저 철거하세요: ${assigned.map((a) => a.deviceid).join(', ')}`);
+  const known = await q('SELECT deviceid FROM eg_deviceinfo WHERE deviceid IN (?)', [ids]);
+  if (!known.length) throw httpError(404, '장비를 찾을 수 없습니다');
+  await q(`INSERT INTO eg_device_hidden (deviceid, hidden_by, reason) VALUES ?
+           ON DUPLICATE KEY UPDATE hidden_at = NOW(), hidden_by = VALUES(hidden_by), reason = VALUES(reason)`,
+  [known.map((k) => [k.deviceid, req.user.sn, reason])]);
+  await audit(req, 'device.hide', 'device', known.length === 1 ? known[0].deviceid : `${known.length}대`, { deviceids: known.map((k) => k.deviceid), reason });
+  res.json({ ok: true, count: known.length });
+}));
+
+r.post('/devices/unhide', requireRole('SYSADMIN'), wrap(async (req, res) => {
+  const ids = [...new Set((req.body?.deviceids || []).map(String))].slice(0, 500);
+  if (!ids.length) throw httpError(400, '되살릴 장비를 고르세요');
+  const out = await q('DELETE FROM eg_device_hidden WHERE deviceid IN (?)', [ids]);
+  await audit(req, 'device.unhide', 'device', ids.length === 1 ? ids[0] : `${ids.length}대`, { deviceids: ids });
+  res.json({ ok: true, count: out.affectedRows });
 }));
 
 export default r;

@@ -50,7 +50,8 @@ r.get('/dashboard', requireAuth, wrap(async (req, res) => {
   let unassigned = null;
   if (req.user.role === 'SYSADMIN') {
     const u = await one(`SELECT COUNT(*) n FROM eg_deviceinfo i
-      WHERE NOT EXISTS (SELECT 1 FROM eg_device_site a WHERE a.deviceid = i.deviceid AND a.removed_on IS NULL)`);
+      WHERE NOT EXISTS (SELECT 1 FROM eg_device_site a WHERE a.deviceid = i.deviceid AND a.removed_on IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM eg_device_hidden h WHERE h.deviceid = i.deviceid)`);
     unassigned = u.n;
   }
 

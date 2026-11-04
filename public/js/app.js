@@ -77,6 +77,16 @@ async function boot() {
   $('#me-name').textContent = user.name;
   $('#me-role').textContent = `${user.roleLabel}${state.me.org ? ` · ${state.me.org.name}` : ''}`;
   $('#logo').src = state.me.logo;
+  $('#logo').classList.toggle('custom', !!state.me.logoCustom);
+  const side = $('.side');
+  const menuBtn = $('#menu-btn');
+  menuBtn.addEventListener('click', () => {
+    const open = side.classList.toggle('open');
+    menuBtn.setAttribute('aria-expanded', String(open));
+  });
+  $('#nav').addEventListener('click', (e) => {
+    if (e.target.closest('a')) { side.classList.remove('open'); menuBtn.setAttribute('aria-expanded', 'false'); }
+  });
   const admin = user.role === 'SYSADMIN' || user.role === 'CUSTADMIN';
   document.querySelectorAll('[data-admin]').forEach((el) => el.classList.toggle('hidden', !admin));
   document.querySelectorAll('[data-sys]').forEach((el) => el.classList.toggle('hidden', user.role !== 'SYSADMIN'));

@@ -33,7 +33,7 @@ export default async function users(view) {
     const email = h('input', { type: 'email', value: u?.email || '' });
     const role = h('select', null, d.roles.map((r) => h('option', { value: r.value, selected: (u?.role || 'VIEWER') === r.value }, r.label)));
     const orgBtn = h('button', { class: 'btn', type: 'button', style: { width: '100%', justifyContent: 'flex-start' } }, u?.orgPath || '조직 고르기');
-    orgBtn.addEventListener('click', () => pickOrg((o) => { orgSn = o.sn; orgBtn.textContent = o.path; }, { title: '볼 수 있는 조직' }));
+    orgBtn.addEventListener('click', () => pickOrg((o) => { orgSn = o.sn; orgBtn.textContent = o.path; }, { title: '볼 수 있는 조직', selectedSn: orgSn }));
     const active = h('select', null, h('option', { value: 'Y', selected: u?.active !== 'N' }, '사용'), h('option', { value: 'N', selected: u?.active === 'N' }, '중지'));
     const orgField = h('div', { class: 'field' }, h('label', null, '볼 수 있는 조직'), orgBtn, h('span', { class: 'hint' }, '이 조직과 그 아래 조직만 보입니다'));
     const syncRole = () => orgField.classList.toggle('hidden', role.value === 'SYSADMIN');
@@ -75,7 +75,7 @@ export default async function users(view) {
     if (!pw) return;
     modal('임시 비밀번호', [
       h('p', null, `${name}(${id})에게 아래 임시 비밀번호를 전달하세요. 이 창을 닫으면 다시 볼 수 없습니다.`),
-      h('p', { style: { fontSize: '22px', fontWeight: 650, letterSpacing: '0.04em', background: 'var(--water-soft)', padding: '10px 14px', borderRadius: '6px', userSelect: 'all' } }, pw),
+      h('p', { style: { fontSize: '22px', fontWeight: 650, letterSpacing: '0.04em', background: 'var(--brand-soft)', padding: '10px 14px', borderRadius: '6px', userSelect: 'all' } }, pw),
     ]);
   }
   void state;

@@ -112,7 +112,8 @@ export function toast(msg) {
 export function drawer(title, sub) {
   const bg = h('div', { class: 'drawer-bg' });
   const body = h('div', { class: 'content' });
-  const close = () => { bg.remove(); panel.remove(); document.removeEventListener('keydown', onKey); };
+  const close = () => { bg.remove(); panel.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('hashchange', close); };
+  window.addEventListener('hashchange', close);
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   const titleEl = h('h2', null, title);
   const subEl = h('div', { class: 'faint', style: { fontSize: '13px' } }, sub || '');
@@ -136,7 +137,8 @@ export function modal(title, content, { submitLabel = '저장', onSubmit, danger
     h('footer', null, h('button', { class: 'btn', type: 'button', onclick: () => close() }, '취소'), onSubmit ? submit : null));
   const bg = h('div', { class: 'modal-bg' }, form);
   const onKey = (e) => { if (e.key === 'Escape') close(); };
-  function close() { bg.remove(); document.removeEventListener('keydown', onKey); }
+  function close() { bg.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('hashchange', close); }
+  window.addEventListener('hashchange', close); // 다른 화면으로 가면 닫는다
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     err.classList.add('hidden');
@@ -164,7 +166,7 @@ export function field(label, input, hint) {
 }
 
 // ── 차트 (ECharts) ───────────────────
-export const COLORS = ['#1C7FA6', '#2F8F5B', '#B97A0F', '#7A5BA6', '#B9432F', '#3E9C9C', '#7D949B'];
+export const COLORS = ['#1F7A45', '#2F8F5B', '#B97A0F', '#5E8F7A', '#B9432F', '#3E7CB1', '#7F9384'];
 
 export function waitECharts() {
   return new Promise((resolve) => {
@@ -179,9 +181,9 @@ export async function chart(el, option) {
   const c = ec.init(el, null, { renderer: 'svg' });
   c.setOption({
     color: COLORS,
-    textStyle: { fontFamily: getComputedStyle(document.body).fontFamily, color: '#4A6670' },
+    textStyle: { fontFamily: getComputedStyle(document.body).fontFamily, color: '#4D6152' },
     grid: { left: 8, right: 16, top: 28, bottom: 8, containLabel: true },
-    tooltip: { trigger: 'axis', backgroundColor: '#0E2A33', borderWidth: 0, textStyle: { color: '#fff' } },
+    tooltip: { trigger: 'axis', backgroundColor: '#134226', borderWidth: 0, textStyle: { color: '#fff' } },
     ...option,
   });
   const ro = new ResizeObserver(() => c.resize());
@@ -190,10 +192,10 @@ export async function chart(el, option) {
 }
 
 export const axisStyle = {
-  axisLine: { lineStyle: { color: '#D6E1E3' } },
+  axisLine: { lineStyle: { color: '#DCE5DA' } },
   axisTick: { show: false },
-  splitLine: { lineStyle: { color: '#E8EFF0' } },
-  axisLabel: { color: '#7D949B' },
+  splitLine: { lineStyle: { color: '#EBF0E9' } },
+  axisLabel: { color: '#7F9384' },
 };
 
 let koreaMap = null;

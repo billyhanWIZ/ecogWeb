@@ -33,7 +33,10 @@ export async function openDevice(deviceid, period, onChanged) {
       h('div', { style: { display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' } },
         d.canEdit && dev.current ? h('button', { class: 'btn small', onclick: () => editInfo(dev) }, '이름·위치 수정') : null,
         d.canAssign ? h('button', { class: 'btn small primary', onclick: () => assign(dev) }, dev.current ? '설치처 변경(이설)' : '설치처 배정') : null,
-        d.canAssign && dev.current ? h('button', { class: 'btn small danger', onclick: () => unassign(dev) }, '철거') : null)));
+        d.canAssign && dev.current ? h('button', { class: 'btn small danger', onclick: () => unassign(dev) }, '철거') : null,
+        d.canAssign && !dev.current && !dev.hidden ? h('button', { class: 'btn small danger', onclick: () => hide(dev) }, '목록에서 숨기기') : null,
+        d.canAssign && dev.hidden ? h('button', { class: 'btn small', onclick: () => unhide(dev) }, '다시 보이기') : null),
+      dev.hidden ? h('p', { class: 'note', style: { marginBottom: 0 } }, `${dev.hidden.at}에 숨긴 장비입니다${dev.hidden.reason ? ` (${dev.hidden.reason})` : ''}. 설치처에 배정하면 자동으로 다시 보입니다.`) : null));
 
     const chartEl = h('div', { class: 'chart short' });
     const avgCmp = d.siteAvg ? h('p', { class: 'faint', style: { fontSize: '13px', margin: '6px 0 0' } },
@@ -86,7 +89,7 @@ export async function openDevice(deviceid, period, onChanged) {
   function assign(dev) {
     let siteSn = null;
     const siteBtn = h('button', { class: 'btn', type: 'button', style: { width: '100%', justifyContent: 'flex-start' } }, '설치처 고르기');
-    siteBtn.addEventListener('click', () => pickOrg((o) => { siteSn = o.sn; siteBtn.textContent = o.path; }));
+    siteBtn.addEventListener('click', () => pickOrg((o) => { siteSn = o.sn; siteBtn.textContent = o.path; }, { selectedSn: siteSn || dev.current?.site_sn }));
     const date = h('input', { type: 'date', value: today(), max: today() });
     const name = h('input', { value: dev.current?.display_name || dev.deviceName || '', maxlength: 100 });
     const loc = h('input', { maxlength: 200, placeholder: '예: 3층 탕비실' });
@@ -115,6 +118,24 @@ export async function openDevice(deviceid, period, onChanged) {
         await changed('철거했습니다');
       },
     });
+  }
+
+  function hide(dev) {
+    const reason = h('input', { maxlength: 200, placeholder: '예: 시험용 장비, 폐기' });
+    modal('목록에서 숨기기', [h('p', { style: { marginTop: 0 } }, `${dev.name}을(를) 장비 목록에서 뺍니다. 세척 기록과 장비 등록 정보는 그대로 남고, 숨김 탭에서 되살릴 수 있습니다.`), field('사유', reason)], {
+      submitLabel: '숨기기', danger: true,
+      onSubmit: async () => {
+        await api('/api/devices/hide', { method: 'POST', body: { deviceids: [dev.deviceid], reason: reason.value } });
+        await changed('숨겼습니다');
+      },
+    });
+  }
+
+  async function unhide(dev) {
+    try {
+      await api('/api/devices/unhide', { method: 'POST', body: { deviceids: [dev.deviceid] } });
+      await changed('다시 보이게 했습니다');
+    } catch (e) { toast(e.message); }
   }
 
   try { await load(); } catch (e) { dr.body.replaceChildren(h('div', { class: 'err' }, e.message)); }

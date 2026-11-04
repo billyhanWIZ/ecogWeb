@@ -80,6 +80,8 @@ fi
 mkdir -p /var/log/ecog "$APP_DIR/data/logos"
 cd "$APP_DIR"
 npm ci --omit=dev
+# PDF 리포트용 Chromium (playwright-core 와 같은 버전)
+npx playwright-core install --with-deps chromium || warn "Chromium 설치 실패. 나중에: cd $APP_DIR && npx playwright-core install --with-deps chromium"
 node scripts/db-migrate.js
 
 if [[ "$WEB" == "" ]]; then apt-get install -y nginx; WEB=nginx; fi

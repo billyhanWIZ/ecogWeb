@@ -17,7 +17,8 @@ export default async function dashboard(view, { params }) {
 
   // 머리말: 사용 횟수를 문장으로
   const chg = (c) => (c == null ? null : h('span', { class: `chg ${c >= 0 ? 'up' : 'down'}` }, `${c >= 0 ? '+' : ''}${fmt.one(c * 100)}%`));
-  const impact = h('section', { class: 'impact', 'aria-label': '기간 요약' },
+  const impact = h('section', { class: 'impact with-photo', 'aria-label': '기간 요약' },
+    h('div', { class: 'photo', role: 'img', 'aria-label': 'eco.G 텀블러 세척기' }),
     h('p', { class: 'lead' }, `${state.me.org?.name || '전체'} 텀블러 세척기는 이 기간에`),
     h('p', { class: 'big' }, `${fmt.int(k.uses)}번 씻었습니다`),
     h('div', { class: 'facts' },
@@ -81,17 +82,17 @@ export default async function dashboard(view, { params }) {
   const sido = d.bySido.filter((s) => s.key !== '미지정');
   const m = await chart(mapEl, {
     tooltip: {
-      trigger: 'item', backgroundColor: '#0E2A33', borderWidth: 0, textStyle: { color: '#fff' },
+      trigger: 'item', backgroundColor: '#134226', borderWidth: 0, textStyle: { color: '#fff' },
       formatter: (x) => `${x.name}<br>${x.value ? `${fmt.int(x.value)}회` : '기록 없음'}`,
     },
     visualMap: {
       min: 0, max: Math.max(1, ...sido.map((s) => s.uses)), left: 8, bottom: 8, itemHeight: 90, calculable: false,
-      inRange: { color: ['#E3F1F7', '#1C7FA6', '#0E2A33'] }, text: ['많음', '적음'], textStyle: { color: '#7D949B' },
+      inRange: { color: ['#E6F2E9', '#1F7A45', '#134226'] }, text: ['많음', '적음'], textStyle: { color: '#7F9384' },
     },
     series: [{
       type: 'map', map: 'korea', roam: false, layoutCenter: ['55%', '52%'], layoutSize: '95%',
-      itemStyle: { areaColor: '#F0F4F5', borderColor: '#fff' },
-      emphasis: { label: { show: false }, itemStyle: { areaColor: '#7FD1F0' } },
+      itemStyle: { areaColor: '#F0F4EF', borderColor: '#fff' },
+      emphasis: { label: { show: false }, itemStyle: { areaColor: '#A8D46F' } },
       select: { disabled: true },
       data: sido.map((s) => ({ name: s.key, value: s.uses })),
     }],
