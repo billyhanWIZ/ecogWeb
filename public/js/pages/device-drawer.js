@@ -35,7 +35,9 @@ export async function openDevice(deviceid, period, onChanged) {
         d.canAssign ? h('button', { class: 'btn small primary', onclick: () => assign(dev) }, dev.current ? '설치처 변경(이설)' : '설치처 배정') : null,
         d.canAssign && dev.current ? h('button', { class: 'btn small danger', onclick: () => unassign(dev) }, '철거') : null,
         d.canAssign && !dev.current && !dev.hidden ? h('button', { class: 'btn small danger', onclick: () => hide(dev) }, '목록에서 숨기기') : null,
-        d.canAssign && dev.hidden ? h('button', { class: 'btn small', onclick: () => unhide(dev) }, '다시 보이기') : null),
+        d.canAssign && dev.hidden ? h('button', { class: 'btn small', onclick: () => unhide(dev) }, '다시 보이기') : null,
+        d.canMarkTest ? h('button', { class: 'btn small', onclick: () => toggleTest(dev) }, dev.test ? '테스트 해제(운영 장비로)' : '테스트 장비로 지정') : null),
+      dev.test ? h('p', { class: 'note', style: { marginBottom: 0 } }, `${dev.test.at}부터 테스트 장비입니다${dev.test.note ? ` (${dev.test.note})` : ''}. 대시보드·통계·리포트·사이니지 숫자에서 빠지고, '테스트 장비' 메뉴에서 따로 봅니다.`) : null,
       dev.hidden ? h('p', { class: 'note', style: { marginBottom: 0 } }, `${dev.hidden.at}에 숨긴 장비입니다${dev.hidden.reason ? ` (${dev.hidden.reason})` : ''}. 설치처에 배정하면 자동으로 다시 보입니다.`) : null));
 
     const chartEl = h('div', { class: 'chart short' });
@@ -127,6 +129,22 @@ export async function openDevice(deviceid, period, onChanged) {
       onSubmit: async () => {
         await api('/api/devices/hide', { method: 'POST', body: { deviceids: [dev.deviceid], reason: reason.value } });
         await changed('숨겼습니다');
+      },
+    });
+  }
+
+  function toggleTest(dev) {
+    if (dev.test) {
+      api('/api/devices/test', { method: 'POST', body: { deviceids: [dev.deviceid], test: false } })
+        .then(() => changed('운영 장비로 돌렸습니다')).catch((e) => toast(e.message));
+      return;
+    }
+    const note = h('input', { maxlength: 200, placeholder: '예: 사무실 시연용, 출고 전 점검' });
+    modal('테스트 장비로 지정', [h('p', { style: { marginTop: 0 } }, `${dev.name}을(를) 테스트 장비로 지정합니다. 대시보드·통계·리포트·사이니지 숫자에서 빠지고(과거 기록 포함), '테스트 장비' 메뉴에서만 보입니다. 언제든 해제할 수 있습니다.`), field('메모', note)], {
+      submitLabel: '지정',
+      onSubmit: async () => {
+        await api('/api/devices/test', { method: 'POST', body: { deviceids: [dev.deviceid], test: true, note: note.value } });
+        await changed('테스트 장비로 지정했습니다');
       },
     });
   }

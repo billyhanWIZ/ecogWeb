@@ -10,7 +10,7 @@ const LABEL = {
 const ACTION = {
   login: '로그인', 'password.change': '비밀번호 변경', 'device.assign': '장비 배정·이설', 'device.unassign': '장비 철거', 'device.update': '장비 정보 수정',
   'org.create': '조직 추가', 'org.update': '조직 수정', 'org.move': '조직 이동', 'org.delete': '조직 삭제', 'org.logo': '로고 변경', 'org.logo.remove': '로고 삭제',
-  'device.hide': '장비 숨김', 'device.unhide': '장비 숨김 해제', 'report.download': '리포트 받기', 'signage.issue': '사이니지 링크 발급', 'signage.revoke': '사이니지 링크 끄기',
+  'device.hide': '장비 숨김', 'device.test': '테스트 장비 지정', 'device.untest': '테스트 장비 해제', 'device.unhide': '장비 숨김 해제', 'report.download': '리포트 받기', 'signage.issue': '사이니지 링크 발급', 'signage.revoke': '사이니지 링크 끄기',
   'user.create': '사용자 추가', 'user.update': '사용자 수정', 'user.reset_password': '비밀번호 초기화', 'settings.update': '설정 변경',
 };
 

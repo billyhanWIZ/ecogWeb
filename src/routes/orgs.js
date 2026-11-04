@@ -65,7 +65,8 @@ function cleanFields(b) {
 
 r.get('/orgs', requireAuth, wrap(async (req, res) => {
   const tree = await loadOrgs();
-  const counts = new Map((await q('SELECT site_sn, COUNT(*) n FROM eg_device_site WHERE removed_on IS NULL GROUP BY site_sn')).map((x) => [x.site_sn, x.n]));
+  const counts = new Map((await q(`SELECT site_sn, COUNT(*) n FROM eg_device_site a WHERE removed_on IS NULL
+    AND NOT EXISTS (SELECT 1 FROM eg_device_test t WHERE t.deviceid = a.deviceid) GROUP BY site_sn`)).map((x) => [x.site_sn, x.n]));
   const scope = userScope(tree, req.user);
   const node = (o) => {
     const kids = o.children.map(node);

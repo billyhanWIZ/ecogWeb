@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { wrap, httpError } from '../lib/http.js';
 import { loadOrgs, descendants, inherited } from '../lib/orgs.js';
-import { dailyUsage, signalStatus } from '../lib/usage.js';
+import { dailyUsage, signalStatus, currentDevices, cumulativeUses } from '../lib/usage.js';
 import { getSettings, impact } from '../lib/settings.js';
 import { todayKST, addDays, eachDay } from '../lib/dates.js';
 import { q, one } from '../db.js';
@@ -52,22 +52,16 @@ async function compute(token) {
   const cumKey = sites.join(',');
   let cumHit = cumCache.get(cumKey);
   if (!cumHit || Date.now() - cumHit.at > 60_000) {
-    cumHit = { at: Date.now(), row: await one(
-    `SELECT COALESCE(SUM(x.cnt), 0) AS uses FROM (
-       SELECT deviceid, cleandate, MAX(cleancount) cnt FROM eg_cleancount GROUP BY deviceid, cleandate
-     ) x JOIN eg_device_site a ON a.deviceid = x.deviceid AND x.cleandate >= a.installed_on
-       AND (a.removed_on IS NULL OR x.cleandate < a.removed_on)
-     WHERE a.site_sn IN (?)`, [sites]) };
+    cumHit = { at: Date.now(), uses: await cumulativeUses(sites) };
     cumCache.set(cumKey, cumHit);
   }
-  const cum = cumHit.row;
-  const current = await q('SELECT deviceid FROM eg_device_site WHERE removed_on IS NULL AND site_sn IN (?)', [sites]);
+  const current = await currentDevices(sites);
   const sig = await signalStatus(current.map((c) => c.deviceid));
   const online = current.filter((c) => (sig.get(c.deviceid)?.ago ?? Infinity) <= s.offline_seconds).length;
   const byDay = new Map();
   for (const d of daily) byDay.set(d.d, (byDay.get(d.d) || 0) + d.cnt);
 
-  const cumUses = Number(cum.uses);
+  const cumUses = cumHit.uses;
   const data = {
     name: org.name,
     logo: inherited(tree, org.sn, 'logo_path') ? `/api/signage/${token}/logo` : '/img/ecog-logo-white.png',

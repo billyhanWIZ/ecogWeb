@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import { loadOrgs, userRoots, inherited, pathName, scopedSubtree } from './orgs.js';
 import { buildStats, resolveSites, loadUsage } from './stats.js';
 import { getSettings, impact } from './settings.js';
-import { signalStatus } from './usage.js';
+import { signalStatus, currentDevices } from './usage.js';
 import { q } from '../db.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -35,7 +35,7 @@ export async function reportData(user, params, period) {
     buildStats(user, { ...p, by: 'site' }, period, data),
   ]);
 
-  const current = sites.length ? await q('SELECT deviceid FROM eg_device_site WHERE removed_on IS NULL AND site_sn IN (?)', [sites]) : [];
+  const current = await currentDevices(sites);
   const sig = await signalStatus(current.map((c) => c.deviceid));
   const online = current.filter((c) => (sig.get(c.deviceid)?.ago ?? Infinity) <= s.offline_seconds).length;
 

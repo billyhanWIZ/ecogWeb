@@ -90,3 +90,9 @@ export function toPublic(o) {
   const { children, ...rest } = o;
   return rest;
 }
+
+/** 테스트 장비를 보고 지정할 수 있는 사람: 시스템 관리자, 최상위(본사) 조직의 고객 관리자 */
+export function canSeeTest(tree, user) {
+  if (user?.role === 'SYSADMIN') return true;
+  return user?.role === 'CUSTADMIN' && tree.roots.some((r) => r.sn === user.org_sn);
+}

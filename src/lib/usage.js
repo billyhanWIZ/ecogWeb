@@ -4,20 +4,30 @@
 import { q } from '../db.js';
 import { addDays, daysBetween } from './dates.js';
 
+/**
+ * 테스트 장비 조건 (eg_device_test). test = 'exclude'(기본, 운영 숫자) | 'only' | 'all'
+ * 대시보드·통계·리포트·사이니지·장비 목록은 모두 'exclude' 로 테스트 장비를 뺀다.
+ */
+export function testCond(alias, test = 'exclude') {
+  if (test === 'all') return '1=1';
+  const ex = `EXISTS (SELECT 1 FROM eg_device_test tt WHERE tt.deviceid = ${alias}.deviceid)`;
+  return test === 'only' ? ex : `NOT ${ex}`;
+}
+
 /** 기간과 겹치는 배정 (설치처가 sites 안에 있는 것) */
-export async function assignments(siteSns, from, to) {
+export async function assignments(siteSns, from, to, test = 'exclude') {
   if (!siteSns.length) return [];
   return q(
     `SELECT a.sn, a.deviceid, a.site_sn, a.display_name, a.installed_on, a.removed_on, a.location_note,
             i.devicename, i.lastsignaldt
      FROM eg_device_site a
      LEFT JOIN eg_deviceinfo i ON i.deviceid = a.deviceid
-     WHERE a.site_sn IN (?) AND a.installed_on <= ? AND (a.removed_on IS NULL OR a.removed_on > ?)`,
+     WHERE a.site_sn IN (?) AND a.installed_on <= ? AND (a.removed_on IS NULL OR a.removed_on > ?) AND ${testCond('a', test)}`,
     [siteSns, to, from]);
 }
 
 /** 장비·일자별 사용 횟수 [{site_sn, deviceid, d, cnt}] */
-export async function dailyUsage(siteSns, from, to, deviceid = null) {
+export async function dailyUsage(siteSns, from, to, deviceid = null, test = deviceid ? 'all' : 'exclude') {
   if (!siteSns.length) return [];
   return q(
     `SELECT a.site_sn, x.deviceid, DATE_FORMAT(x.cleandate, '%Y-%m-%d') AS d, x.cnt
@@ -31,8 +41,26 @@ export async function dailyUsage(siteSns, from, to, deviceid = null) {
        ON a.deviceid = x.deviceid
       AND x.cleandate >= a.installed_on
       AND (a.removed_on IS NULL OR x.cleandate < a.removed_on)
-     WHERE a.site_sn IN (?)`,
+     WHERE a.site_sn IN (?) AND ${testCond('a', test)}`,
     deviceid ? [from, to, deviceid, siteSns] : [from, to, siteSns]);
+}
+
+/** 지금 배정된 장비 (테스트 장비 제외) */
+export async function currentDevices(siteSns, test = 'exclude') {
+  if (!siteSns.length) return [];
+  return q(`SELECT a.deviceid FROM eg_device_site a WHERE a.removed_on IS NULL AND a.site_sn IN (?) AND ${testCond('a', test)}`, [siteSns]);
+}
+
+/** 설치 이후 누적 사용 횟수 (배정 기간 기준, 테스트 장비 제외) */
+export async function cumulativeUses(siteSns, test = 'exclude') {
+  if (!siteSns.length) return 0;
+  const [row] = await q(
+    `SELECT COALESCE(SUM(x.cnt), 0) AS uses FROM (
+       SELECT deviceid, cleandate, MAX(cleancount) cnt FROM eg_cleancount GROUP BY deviceid, cleandate
+     ) x JOIN eg_device_site a ON a.deviceid = x.deviceid AND x.cleandate >= a.installed_on
+       AND (a.removed_on IS NULL OR x.cleandate < a.removed_on)
+     WHERE a.site_sn IN (?) AND ${testCond('a', test)}`, [siteSns]);
+  return Number(row.uses);
 }
 
 /** 배정이 기간 안에서 유효한 일수 */

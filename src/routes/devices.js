@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { wrap, httpError } from '../lib/http.js';
 import { requireAuth, requireRole, isAdmin } from '../lib/auth.js';
 import { parsePeriod, todayKST, addDays, eachDay, weekday, isDate } from '../lib/dates.js';
-import { loadOrgs, userScope, scopedSubtree, pathName, userRoots, ancestors } from '../lib/orgs.js';
+import { loadOrgs, userScope, scopedSubtree, pathName, userRoots, ancestors, canSeeTest } from '../lib/orgs.js';
 import { dailyUsage, assignments, overlapDays } from '../lib/usage.js';
 import { getSettings, impact } from '../lib/settings.js';
 import { audit } from '../lib/audit.js';
@@ -29,7 +29,8 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
     ? await q(
       `SELECT a.deviceid, a.site_sn, a.display_name, DATE_FORMAT(a.installed_on,'%Y-%m-%d') installed_on, a.location_note,
               i.devicename, DATE_FORMAT(i.lastsignaldt,'%Y-%m-%d %H:%i:%s') lastsignaldt,
-              GREATEST(TIMESTAMPDIFF(SECOND, i.lastsignaldt, NOW()), 0) ago
+              GREATEST(TIMESTAMPDIFF(SECOND, i.lastsignaldt, NOW()), 0) ago,
+              (SELECT 1 FROM eg_device_test t WHERE t.deviceid = a.deviceid) is_test
        FROM eg_device_site a LEFT JOIN eg_deviceinfo i ON i.deviceid = a.deviceid
        WHERE a.removed_on IS NULL AND a.site_sn IN (?)`, [sites])
     : [];
@@ -39,7 +40,8 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
       `SELECT i.deviceid, NULL site_sn, NULL display_name, NULL installed_on, NULL location_note, i.devicename,
               DATE_FORMAT(i.lastsignaldt,'%Y-%m-%d %H:%i:%s') lastsignaldt, GREATEST(TIMESTAMPDIFF(SECOND, i.lastsignaldt, NOW()), 0) ago,
               DATE_FORMAT(h.hidden_at,'%Y-%m-%d %H:%i') hidden_at, h.reason hidden_reason,
-              (h.deviceid IS NOT NULL AND i.lastsignaldt > h.hidden_at) signal_after_hide
+              (h.deviceid IS NOT NULL AND i.lastsignaldt > h.hidden_at) signal_after_hide,
+              (SELECT 1 FROM eg_device_test t WHERE t.deviceid = i.deviceid) is_test
        FROM eg_deviceinfo i
        LEFT JOIN eg_device_hidden h ON h.deviceid = i.deviceid
        WHERE NOT EXISTS (SELECT 1 FROM eg_device_site a WHERE a.deviceid = i.deviceid AND a.removed_on IS NULL)`);
@@ -90,21 +92,27 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
       hiddenAt: d.hidden_at || null,
       hiddenReason: d.hidden_reason || null,
       signalAfterHide: !!Number(d.signal_after_hide || 0),
+      test: !!d.is_test,
     };
   });
 
+  const seeTest = canSeeTest(tree, req.user);
+  const op = list.filter((d) => !d.test); // 운영 장비 (테스트 제외)
   const counts = {
-    all: list.filter((d) => d.assigned).length,
-    online: list.filter((d) => d.assigned && d.status === 'online').length,
-    offline: list.filter((d) => d.assigned && d.status !== 'online').length,
-    drop: list.filter((d) => d.assigned && d.drop).length,
-    unassigned: list.filter((d) => !d.assigned && !d.hidden).length,
-    hidden: list.filter((d) => d.hidden).length,
+    all: op.filter((d) => d.assigned).length,
+    online: op.filter((d) => d.assigned && d.status === 'online').length,
+    offline: op.filter((d) => d.assigned && d.status !== 'online').length,
+    drop: op.filter((d) => d.assigned && d.drop).length,
+    unassigned: op.filter((d) => !d.assigned && !d.hidden).length,
+    hidden: op.filter((d) => d.hidden).length,
+    test: seeTest ? list.filter((d) => d.test).length : null,
   };
   const st = req.query.status || 'all';
   const kw = String(req.query.q || '').trim().toLowerCase();
   const filtered = list.filter((d) => {
-    if (st === 'hidden') { if (!d.hidden) return false; }
+    if (st === 'test') { if (!seeTest || !d.test) return false; }
+    else if (d.test) return false;
+    else if (st === 'hidden') { if (!d.hidden) return false; }
     else if (st === 'unassigned') { if (d.assigned || d.hidden) return false; }
     else {
       if (!d.assigned) return false;
@@ -120,7 +128,7 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
     return b.last30 - a.last30;
   });
 
-  res.json({ counts, devices: filtered, offlineSeconds: s.offline_seconds });
+  res.json({ counts, devices: filtered, offlineSeconds: s.offline_seconds, canSeeTest: seeTest });
 }));
 
 /** 이 사용자가 이 장비를 볼 수 있는지 + 배정 이력 */
@@ -172,6 +180,7 @@ r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
     siteAvg = { devices: new Set(assign.map((a) => a.deviceid)).size, perDeviceDay: dd ? sd.reduce((x, y) => x + y.cnt, 0) / dd : 0 };
   }
   const total = await one('SELECT COALESCE(SUM(c),0) uses FROM (SELECT MAX(cleancount) c FROM eg_cleancount WHERE deviceid = ? GROUP BY cleandate) x', [info.deviceid]);
+  const testRow = await one("SELECT DATE_FORMAT(marked_at,'%Y-%m-%d %H:%i') marked_at, note FROM eg_device_test WHERE deviceid = ?", [info.deviceid]);
   const hidden = req.user.role === 'SYSADMIN'
     ? await one("SELECT DATE_FORMAT(hidden_at,'%Y-%m-%d %H:%i') hidden_at, reason FROM eg_device_hidden WHERE deviceid = ?", [info.deviceid])
     : null;
@@ -187,6 +196,7 @@ r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
       current: cur ? { ...cur, sitePath: pathName(tree, cur.site_sn, viewRoot) } : null,
       totalUses: Number(total.uses),
       hidden: hidden ? { at: hidden.hidden_at, reason: hidden.reason } : null,
+      test: testRow ? { at: testRow.marked_at, note: testRow.note } : null,
     },
     history: hist.map((h) => ({ ...h, sitePath: tree.byId.has(h.site_sn) ? pathName(tree, h.site_sn, viewRoot) : `(삭제된 조직 ${h.site_sn})` })),
     period,
@@ -198,6 +208,7 @@ r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
     siteAvg,
     canEdit: isAdmin(req.user),
     canAssign: req.user.role === 'SYSADMIN',
+    canMarkTest: canSeeTest(tree, req.user),
   });
 }));
 
@@ -262,6 +273,89 @@ r.post('/devices/:id/unassign', requireRole('SYSADMIN'), wrap(async (req, res) =
   });
   await audit(req, 'device.unassign', 'device', deviceid, { removedOn: day });
   res.json({ ok: true });
+}));
+
+/** 테스트 장비로 지정·해제 (여러 대). 시스템 관리자·본사 관리자 */
+r.post('/devices/test', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
+  const tree = await loadOrgs();
+  if (!canSeeTest(tree, req.user)) throw httpError(403, '권한이 없습니다');
+  const ids = [...new Set((req.body?.deviceids || []).map(String))].slice(0, 500);
+  if (!ids.length) throw httpError(400, '장비를 고르세요');
+  let allowed = (await q('SELECT deviceid FROM eg_deviceinfo WHERE deviceid IN (?)', [ids])).map((x) => x.deviceid);
+  if (req.user.role !== 'SYSADMIN') {
+    // 본사 관리자는 자기 조직에 배정된 장비만
+    const scope = [...userScope(tree, req.user)];
+    const inScope = new Set((await q('SELECT deviceid FROM eg_device_site WHERE removed_on IS NULL AND deviceid IN (?) AND site_sn IN (?)', [ids, scope])).map((x) => x.deviceid));
+    allowed = allowed.filter((id) => inScope.has(id));
+  }
+  if (!allowed.length) throw httpError(404, '장비를 찾을 수 없습니다');
+  if (req.body?.test === false) {
+    await q('DELETE FROM eg_device_test WHERE deviceid IN (?)', [allowed]);
+  } else {
+    const note = String(req.body?.note || '').trim().slice(0, 200) || null;
+    await q(`INSERT INTO eg_device_test (deviceid, marked_by, note) VALUES ?
+             ON DUPLICATE KEY UPDATE note = VALUES(note)`, [allowed.map((id) => [id, req.user.sn, note])]);
+  }
+  await audit(req, req.body?.test === false ? 'device.untest' : 'device.test', 'device', allowed.length === 1 ? allowed[0] : `${allowed.length}대`, { deviceids: allowed });
+  res.json({ ok: true, count: allowed.length });
+}));
+
+/** 테스트 장비 모아 보기 */
+r.get('/test-devices', requireAuth, wrap(async (req, res) => {
+  const tree = await loadOrgs();
+  if (!canSeeTest(tree, req.user)) throw httpError(403, '권한이 없습니다');
+  const s = await getSettings();
+  const period = parsePeriod({ from: req.query.from || addDays(todayKST(), -29), to: req.query.to });
+  const viewRoot = userRoots(tree, req.user).length === 1 ? userRoots(tree, req.user)[0] : null;
+  let rows = await q(`SELECT t.deviceid, DATE_FORMAT(t.marked_at,'%Y-%m-%d') marked_at, t.note, i.devicename,
+                             DATE_FORMAT(i.lastsignaldt,'%Y-%m-%d %H:%i:%s') lastsignaldt,
+                             GREATEST(TIMESTAMPDIFF(SECOND, i.lastsignaldt, NOW()), 0) ago,
+                             a.site_sn, a.display_name, a.location_note
+                      FROM eg_device_test t
+                      JOIN eg_deviceinfo i ON i.deviceid = t.deviceid
+                      LEFT JOIN eg_device_site a ON a.deviceid = t.deviceid AND a.removed_on IS NULL`);
+  if (req.user.role !== 'SYSADMIN') {
+    const scope = userScope(tree, req.user);
+    rows = rows.filter((x) => x.site_sn != null && scope.has(x.site_sn));
+  }
+  const ids = rows.map((x) => x.deviceid);
+  const daily = ids.length
+    ? await q(`SELECT deviceid, DATE_FORMAT(cleandate,'%Y-%m-%d') d, MAX(cleancount) cnt FROM eg_cleancount
+               WHERE deviceid IN (?) AND cleandate BETWEEN ? AND ? GROUP BY deviceid, cleandate`, [ids, period.from, period.to])
+    : [];
+  const today = todayKST();
+  const byDev = new Map();
+  const byDay = new Map();
+  for (const x of daily) {
+    byDev.set(x.deviceid, (byDev.get(x.deviceid) || 0) + x.cnt);
+    byDay.set(x.d, (byDay.get(x.d) || 0) + x.cnt);
+  }
+  const todayBy = new Map(daily.filter((x) => x.d === today).map((x) => [x.deviceid, x.cnt]));
+  const devices = rows.map((x) => ({
+    deviceid: x.deviceid,
+    name: x.display_name || x.devicename || x.deviceid,
+    sitePath: x.site_sn != null && tree.byId.has(x.site_sn) ? pathName(tree, x.site_sn, viewRoot) : null,
+    locationNote: x.location_note,
+    markedAt: x.marked_at,
+    note: x.note,
+    lastSignal: x.lastsignaldt,
+    ago: x.ago,
+    status: statusOf(x.ago, s),
+    today: todayBy.get(x.deviceid) || 0,
+    uses: byDev.get(x.deviceid) || 0,
+  })).sort((a, b) => (a.ago ?? 1e12) - (b.ago ?? 1e12));
+  res.json({
+    period,
+    kpi: {
+      devices: devices.length,
+      online: devices.filter((d) => d.status === 'online').length,
+      today: devices.reduce((n, d) => n + d.today, 0),
+      uses: devices.reduce((n, d) => n + d.uses, 0),
+    },
+    trend: eachDay(period.from, period.to).map((d) => ({ d, uses: byDay.get(d) || 0 })),
+    devices,
+    offlineSeconds: s.offline_seconds,
+  });
 }));
 
 /** 목록에서 숨기기 (여러 대). 설치처에 배정된 장비는 먼저 철거해야 한다. 장비 테이블은 건드리지 않는다 */

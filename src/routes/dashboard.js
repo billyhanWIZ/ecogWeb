@@ -4,7 +4,7 @@ import { requireAuth } from '../lib/auth.js';
 import { parsePeriod } from '../lib/dates.js';
 import { loadOrgs } from '../lib/orgs.js';
 import { buildStats, resolveSites, loadUsage } from '../lib/stats.js';
-import { signalStatus } from '../lib/usage.js';
+import { signalStatus, currentDevices, cumulativeUses } from '../lib/usage.js';
 import { getSettings, impact } from '../lib/settings.js';
 import { q, one } from '../db.js';
 
@@ -23,9 +23,7 @@ r.get('/dashboard', requireAuth, wrap(async (req, res) => {
   ]);
 
   // 지금 배정된 장비의 신호 상태
-  const current = sites.length
-    ? await q('SELECT deviceid FROM eg_device_site WHERE removed_on IS NULL AND site_sn IN (?)', [sites])
-    : [];
+  const current = await currentDevices(sites);
   const sig = await signalStatus(current.map((c) => c.deviceid));
   let online = 0;
   let offline = 0;
@@ -38,20 +36,14 @@ r.get('/dashboard', requireAuth, wrap(async (req, res) => {
   }
 
   // 누적 (전체 기간)
-  const cum = sites.length
-    ? await one(
-      `SELECT COALESCE(SUM(x.cnt), 0) AS uses FROM (
-         SELECT deviceid, cleandate, MAX(cleancount) cnt FROM eg_cleancount GROUP BY deviceid, cleandate
-       ) x JOIN eg_device_site a ON a.deviceid = x.deviceid AND x.cleandate >= a.installed_on
-         AND (a.removed_on IS NULL OR x.cleandate < a.removed_on)
-       WHERE a.site_sn IN (?)`, [sites])
-    : { uses: 0 };
+  const cum = { uses: await cumulativeUses(sites) };
 
   let unassigned = null;
   if (req.user.role === 'SYSADMIN') {
     const u = await one(`SELECT COUNT(*) n FROM eg_deviceinfo i
       WHERE NOT EXISTS (SELECT 1 FROM eg_device_site a WHERE a.deviceid = i.deviceid AND a.removed_on IS NULL)
-        AND NOT EXISTS (SELECT 1 FROM eg_device_hidden h WHERE h.deviceid = i.deviceid)`);
+        AND NOT EXISTS (SELECT 1 FROM eg_device_hidden h WHERE h.deviceid = i.deviceid)
+        AND NOT EXISTS (SELECT 1 FROM eg_device_test t WHERE t.deviceid = i.deviceid)`);
     unassigned = u.n;
   }
 

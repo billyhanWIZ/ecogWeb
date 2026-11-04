@@ -45,6 +45,7 @@ const pages = {
   orgs: () => import('./pages/orgs.js'),
   users: () => import('./pages/users.js'),
   settings: () => import('./pages/settings.js'),
+  test: () => import('./pages/test.js'),
 };
 
 let renderSeq = 0;
@@ -90,6 +91,7 @@ async function boot() {
   const admin = user.role === 'SYSADMIN' || user.role === 'CUSTADMIN';
   document.querySelectorAll('[data-admin]').forEach((el) => el.classList.toggle('hidden', !admin));
   document.querySelectorAll('[data-sys]').forEach((el) => el.classList.toggle('hidden', user.role !== 'SYSADMIN'));
+  document.querySelectorAll('[data-testmenu]').forEach((el) => el.classList.toggle('hidden', !user.canSeeTest));
   $('#btn-logout').addEventListener('click', async () => {
     await api('/api/auth/logout', { method: 'POST' });
     location.href = '/login';

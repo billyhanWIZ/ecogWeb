@@ -16,6 +16,7 @@ export default async function devices(view, { params }) {
     ['offline', '무신호', d.counts.offline],
     ['drop', '사용 급감', d.counts.drop],
     ...(isSys ? [['unassigned', '미배정', d.counts.unassigned], ['hidden', '숨김', d.counts.hidden]] : []),
+    ...(d.canSeeTest ? [['test', '테스트', d.counts.test]] : []),
   ];
   const tabs = h('div', { class: 'tabs', role: 'tablist' }, TABS.map(([k, label, n]) => h('button', {
     role: 'tab', 'aria-selected': String(status === k), onclick: () => go('devices', { status: k, q: kw }),
@@ -32,22 +33,34 @@ export default async function devices(view, { params }) {
     drop: '최근 2주 평균은 꾸준한데 어제 한 번도 쓰이지 않은 장비입니다. 고장이나 위치 이동을 확인하세요.',
     unassigned: '전원을 켜면 스스로 등록되지만 아직 설치처가 없는 장비입니다. 눌러서 설치처를 배정하세요. 방금 켠 장비가 맨 위에 있습니다. 시험용·폐기 장비는 골라서 숨기세요.',
     hidden: '목록에서 숨긴 장비입니다. 장비 기록은 그대로 남아 있고, 숨긴 뒤 다시 신호가 들어오면 표시됩니다.',
+    test: '테스트용으로 지정한 장비입니다. 대시보드·통계·리포트·사이니지 숫자에서 빠집니다. 사용량은 \'테스트 장비\' 메뉴에서 따로 봅니다.',
   }[status];
 
   // 미배정·숨김 탭: 여러 대 골라서 숨기기 / 되살리기
-  const selectable = isSys && (status === 'unassigned' || status === 'hidden');
+  const selectable = (isSys && (status === 'unassigned' || status === 'hidden')) || (d.canSeeTest && status === 'test');
   const picked = new Set();
   const countEl = h('span', { class: 'muted', style: { fontSize: '14px' } }, '');
-  const actBtn = h('button', { class: `btn small ${status === 'hidden' ? 'primary' : 'danger'}`, disabled: true, type: 'button' },
-    status === 'hidden' ? '선택한 장비 다시 보이기' : '선택한 장비 숨기기');
+  const actBtn = h('button', { class: `btn small ${status === 'unassigned' ? 'danger' : 'primary'}`, disabled: true, type: 'button' },
+    status === 'hidden' ? '선택한 장비 다시 보이기' : status === 'test' ? '선택한 장비 테스트 해제' : '선택한 장비 숨기기');
+  const testBtn = status === 'unassigned' ? h('button', { class: 'btn small', disabled: true, type: 'button' }, '선택한 장비 테스트로 지정') : null;
   const syncPicked = () => {
     countEl.textContent = picked.size ? `${picked.size}대 선택` : '';
     actBtn.disabled = !picked.size;
+    if (testBtn) testBtn.disabled = !picked.size;
     view.querySelectorAll('input[data-dev]').forEach((c) => { c.checked = picked.has(c.dataset.dev); });
   };
   const pickWhere = (fn) => { d.devices.filter(fn).forEach((x) => picked.add(x.deviceid)); syncPicked(); };
+  testBtn?.addEventListener('click', () => {
+    api('/api/devices/test', { method: 'POST', body: { deviceids: [...picked], test: true } })
+      .then((r) => { toast(`${r.count}대를 테스트 장비로 지정했습니다`); reload(); }).catch((e) => toast(e.message));
+  });
   actBtn.addEventListener('click', () => {
     const ids = [...picked];
+    if (status === 'test') {
+      api('/api/devices/test', { method: 'POST', body: { deviceids: ids, test: false } })
+        .then((r) => { toast(`${r.count}대를 운영 장비로 돌렸습니다`); reload(); }).catch((e) => toast(e.message));
+      return;
+    }
     if (status === 'hidden') {
       api('/api/devices/unhide', { method: 'POST', body: { deviceids: ids } })
         .then((r) => { toast(`${r.count}대를 다시 보이게 했습니다`); reload(); }).catch((e) => toast(e.message));
@@ -70,7 +83,7 @@ export default async function devices(view, { params }) {
     status === 'unassigned' ? h('button', { class: 'btn small', type: 'button', onclick: () => pickWhere((x) => x.last30 === 0 && (x.ago == null || x.ago > 30 * 86400)) }, '30일 넘게 신호·사용 없는 장비 고르기') : null,
     h('button', { class: 'btn small', type: 'button', onclick: () => pickWhere(() => true) }, '모두 고르기'),
     h('button', { class: 'btn small', type: 'button', onclick: () => { picked.clear(); syncPicked(); } }, '선택 해제'),
-    countEl, h('span', { style: { flex: 1 } }), actBtn) : null;
+    countEl, h('span', { style: { flex: 1 } }), testBtn, actBtn) : null;
   const checkCell = (x) => (selectable ? h('td', { onclick: (e) => e.stopPropagation(), style: { width: '28px' } },
     h('input', { type: 'checkbox', 'data-dev': x.deviceid, 'aria-label': `${x.name} 선택`, onchange: (e) => { if (e.target.checked) picked.add(x.deviceid); else picked.delete(x.deviceid); syncPicked(); } })) : null);
 
@@ -82,7 +95,7 @@ export default async function devices(view, { params }) {
   checkCell(x),
   h('td', null, h('b', { style: { fontWeight: 600 } }, x.name), h('div', { class: 'faint', style: { fontSize: '12.5px' } }, x.deviceid)),
   h('td', null, x.sitePath || h('span', { class: 'faint' }, '미배정'), x.locationNote ? h('div', { class: 'faint', style: { fontSize: '12.5px' } }, x.locationNote) : null),
-  h('td', null, statusPill(x.status, x.ago), x.drop ? h('span', { class: 'pill drop', style: { marginLeft: '4px' } }, '급감') : null,
+  h('td', null, statusPill(x.status, x.ago), x.test ? h('span', { class: 'pill never', style: { marginLeft: '4px' } }, '테스트') : null, x.drop ? h('span', { class: 'pill drop', style: { marginLeft: '4px' } }, '급감') : null,
     x.hidden ? h('div', { class: 'faint', style: { fontSize: '12.5px' } }, `${x.hiddenAt} 숨김${x.hiddenReason ? ` · ${x.hiddenReason}` : ''}`) : null,
     x.signalAfterHide ? h('div', { class: 'pill drop', style: { marginTop: '3px' } }, '숨긴 뒤 신호 들어옴') : null),
   h('td', { class: 'r' }, fmt.int(x.today)),

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { wrap, httpError } from '../lib/http.js';
 import { login, requireAuth, hashPassword, checkPasswordRule, ROLE_LABEL } from '../lib/auth.js';
 import { one, exec } from '../db.js';
-import { loadOrgs, userRoots, inherited } from '../lib/orgs.js';
+import { loadOrgs, userRoots, inherited, canSeeTest } from '../lib/orgs.js';
 import { getSettings } from '../lib/settings.js';
 import { audit } from '../lib/audit.js';
 import bcrypt from 'bcryptjs';
@@ -38,6 +38,7 @@ r.get('/me', requireAuth, wrap(async (req, res) => {
       roleLabel: ROLE_LABEL[req.user.role],
       email: req.user.email,
       mustChangePassword: req.user.must_change_pw === 'Y',
+      canSeeTest: canSeeTest(tree, req.user),
     },
     org: home ? { sn: home.sn, name: home.name } : null,
     logo: home && inherited(tree, home.sn, 'logo_path') ? `/api/orgs/${home.sn}/logo` : '/img/ecog-logo-white.png',
