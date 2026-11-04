@@ -7,7 +7,9 @@ import { config } from '../config.js';
 import { inherited, ancestors, userRoots } from './orgs.js';
 import { normalizeSido } from './regions.js';
 
-const BASE = process.env.KMA_BASE_URL || 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0';
+// 같은 서비스를 두 곳에서 준다: 기상청 API허브(authKey) 또는 공공데이터포털(serviceKey). 키를 넣은 쪽을 쓴다.
+const HUB = 'https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0';
+const PORTAL = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0';
 const FRESH = 10 * 60_000;
 const RETRY = 2 * 60_000;
 const STALE = 3 * 3600_000;
@@ -122,16 +124,22 @@ function baseFcst(now) {
   return { base_date: b.date, base_time: `${b.hh}30` };
 }
 
-function serviceKey() {
+function provider() {
+  const hub = (process.env.KMA_APIHUB_KEY || '').trim();
+  if (hub) return { base: process.env.KMA_BASE_URL || HUB, param: 'authKey', key: hub };
   const k = (process.env.KMA_SERVICE_KEY || '').trim();
   if (!k) return null;
   // 포털의 '인코딩' 키를 넣어도 되게 한 번 풀어 둔다
-  try { return k.includes('%') ? decodeURIComponent(k) : k; } catch { return k; }
+  let key = k;
+  try { if (k.includes('%')) key = decodeURIComponent(k); } catch { /* 그대로 */ }
+  return { base: process.env.KMA_BASE_URL || PORTAL, param: 'serviceKey', key };
 }
+const serviceKey = () => provider()?.key || null;
 
 async function call(op, grid, base) {
-  const qs = new URLSearchParams({ serviceKey: serviceKey(), pageNo: '1', numOfRows: '100', dataType: 'JSON', ...base, nx: String(grid.nx), ny: String(grid.ny) });
-  const res = await fetch(`${BASE}/${op}?${qs}`, { signal: AbortSignal.timeout(6000) });
+  const pv = provider();
+  const qs = new URLSearchParams({ [pv.param]: pv.key, pageNo: '1', numOfRows: '100', dataType: 'JSON', ...base, nx: String(grid.nx), ny: String(grid.ny) });
+  const res = await fetch(`${pv.base}/${op}?${qs}`, { signal: AbortSignal.timeout(6000) });
   const text = await res.text();
   let body;
   try { body = JSON.parse(text); } catch { throw new Error(`기상청 응답 오류 (${res.status}): ${text.slice(0, 120).replace(/\s+/g, ' ')}`); }
