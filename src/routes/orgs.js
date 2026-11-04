@@ -6,6 +6,7 @@ import { wrap, httpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { loadOrgs, invalidateOrgs, userScope, userRoots, inherited, descendants, toPublic } from '../lib/orgs.js';
 import { normalizeSido, SIDO } from '../lib/regions.js';
+import { resolvePlace, orgLocation, nearestName } from '../lib/weather.js';
 import { audit } from '../lib/audit.js';
 import { q, exec, one } from '../db.js';
 import { config } from '../config.js';
@@ -59,6 +60,14 @@ function cleanFields(b) {
   for (const k of ['lat', 'lng']) {
     if (b[k] !== undefined) out[k] = b[k] === '' || b[k] == null ? null : Number(b[k]);
   }
+  if (b.weatherPlace !== undefined) {
+    const t = String(b.weatherPlace || '').trim();
+    if (!t) { out.lat = null; out.lng = null; } else {
+      const p = resolvePlace(t);
+      if (!p) throw httpError(400, '날씨 위치를 찾지 못했습니다. 예: 진주시, 서울 강남구, 35.18, 128.10');
+      out.lat = p.lat; out.lng = p.lng;
+    }
+  }
   if (b.sortOrder !== undefined) out.sort_order = Number(b.sortOrder) || 0;
   return out;
 }
@@ -75,6 +84,8 @@ r.get('/orgs', requireAuth, wrap(async (req, res) => {
       ...toPublic(o),
       sidoInherited: inherited(tree, o.sn, 'sido'),
       sigunguInherited: inherited(tree, o.sn, 'sigungu'),
+      weatherSet: o.lat != null && o.lng != null ? `${nearestName(Number(o.lat), Number(o.lng))} (${Number(o.lat).toFixed(4)}, ${Number(o.lng).toFixed(4)})` : null,
+      weatherAuto: orgLocation(tree, o.sn)?.label || null,
       logoUrl: inherited(tree, o.sn, 'logo_path') ? `/api/orgs/${o.sn}/logo` : null,
       devices: direct,
       devicesTotal: direct + kids.reduce((x, k) => x + k.devicesTotal, 0),

@@ -1,7 +1,39 @@
 import { api, go, state } from '../app.js';
+import { weatherNodes, weatherTitle } from '../wx.js';
 import { h, fmt, periodPicker, defaultPeriod, chart, axisStyle, bucketLabel, ensureKoreaMap } from '../ui.js';
 
 const UNIT = { day: '일별', week: '주별', month: '월별' };
+
+// 머리말 오른쪽 사진 속 세척기 몸통 위 시계·날씨 (TV 화면과 같은 모양)
+const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const pad = (n) => String(n).padStart(2, '0');
+function liveClock(disposers) {
+  const time = h('b');
+  const date = h('small');
+  const wx = h('div', { class: 'wx', hidden: true });
+  const box = h('div', { class: 'dash-clock' }, h('time', null, time, date), wx);
+  const tick = () => {
+    const t = new Date();
+    time.textContent = `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+    date.textContent = `${t.getFullYear()}.${pad(t.getMonth() + 1)}.${pad(t.getDate())} (${DAYS[t.getDay()]})`;
+  };
+  const loadWx = async () => {
+    try {
+      const { weather } = await api('/api/weather');
+      const nodes = weatherNodes(weather);
+      if (!nodes) { wx.hidden = true; return; }
+      wx.replaceChildren(...nodes);
+      wx.title = weatherTitle(weather);
+      wx.hidden = false;
+    } catch { /* 날씨는 없어도 된다 */ }
+  };
+  tick();
+  loadWx();
+  const t1 = setInterval(tick, 1000);
+  const t2 = setInterval(loadWx, 10 * 60_000);
+  disposers.push(() => { clearInterval(t1); clearInterval(t2); });
+  return box;
+}
 
 export default async function dashboard(view, { params }) {
   const p = defaultPeriod(params);
@@ -17,8 +49,10 @@ export default async function dashboard(view, { params }) {
 
   // 머리말: 사용 횟수를 문장으로
   const chg = (c) => (c == null ? null : h('span', { class: `chg ${c >= 0 ? 'up' : 'down'}` }, `${c >= 0 ? '+' : ''}${fmt.one(c * 100)}%`));
+  const clock = liveClock(disposers);
   const impact = h('section', { class: 'impact with-photo', 'aria-label': '기간 요약' },
     h('div', { class: 'photo', role: 'img', 'aria-label': 'eco.G 텀블러 세척기' }),
+    clock,
     h('p', { class: 'lead' }, `${state.me.org?.name || '전체'} 텀블러 세척기는 이 기간에`),
     h('p', { class: 'big' }, `${fmt.int(k.uses)}번 씻었습니다`),
     h('div', { class: 'facts' },

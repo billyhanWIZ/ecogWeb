@@ -266,9 +266,33 @@ table.t tfoot td { font-weight: 650; border-top: 1px solid var(--line); border-b
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 38%); mask-image: linear-gradient(90deg, transparent 0, #000 38%);
 }
 
+/* 사진 속 세척기 몸통(로고 아래)에 얹는 시계·날씨 */
+.dash-clock {
+  position: absolute; right: 26px; top: 96px; width: 150px; z-index: 1;
+  text-align: center; color: #fff; line-height: 1.2;
+  background: rgba(19, 66, 38, .82); padding: 8px 8px 7px; border-radius: 10px;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.dash-clock time b { display: block; font-size: 22px; font-weight: 650; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.dash-clock time small { display: block; color: #C4D9C6; font-size: 11px; margin-top: 1px; }
+.dash-clock .wx { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(196, 217, 198, .28); }
+.dash-clock .wx[hidden] { display: none; }
+.dash-clock .wx-icon { width: 26px; height: 26px; flex: none; }
+.dash-clock .wx b { font-size: 19px; font-weight: 650; }
+.dash-clock .wx span { font-size: 11px; color: #DDEBDD; text-align: left; line-height: 1.25; }
+.dash-clock .wx small { display: block; color: #A9C2AB; font-size: 10px; }
+
 @media (max-width: 1100px) {
   .impact.with-photo { padding-right: 28px; }
   .impact .photo { display: none; }
+  /* 사진이 빠지면 머리말 오른쪽 위에 배경 없이 */
+  .dash-clock { top: 18px; right: 20px; width: auto; background: none; padding: 0; text-align: right; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .dash-clock .wx { justify-content: flex-end; border-top: 0; padding-top: 0; margin-top: 4px; }
+}
+@media (max-width: 600px) {
+  .dash-clock { position: static; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; text-align: left; }
+  .dash-clock time b { font-size: 18px; }
+  .dash-clock .wx { margin-top: 0; }
 }
 @media (max-width: 960px) {
   .g-2-1, .g-1-1, .g-tree { grid-template-columns: 1fr !important; }

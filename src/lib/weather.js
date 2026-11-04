@@ -4,7 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
-import { inherited, ancestors } from './orgs.js';
+import { inherited, ancestors, userRoots } from './orgs.js';
+import { normalizeSido } from './regions.js';
 
 const BASE = process.env.KMA_BASE_URL || 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0';
 const FRESH = 10 * 60_000;
@@ -24,7 +25,7 @@ export function orgLocation(tree, sn) {
   for (let i = chain.length - 1; i >= 0; i--) {
     const o = chain[i];
     const sido = inherited(tree, o.sn, 'sido');
-    if (o.lat != null && o.lng != null && Number(o.lat) && Number(o.lng)) return { lat: Number(o.lat), lng: Number(o.lng), label: o.sigungu || sido || '' };
+    if (o.lat != null && o.lng != null && Number(o.lat) && Number(o.lng)) return { lat: Number(o.lat), lng: Number(o.lng), label: nearestName(Number(o.lat), Number(o.lng)) };
     if (o.sigungu) {
       const name = String(o.sigungu).replace(/\s+/g, '');
       let hit = sido && c.sigungu[`${sido}|${name}`];
@@ -36,6 +37,50 @@ export function orgLocation(tree, sn) {
       if (hit) return { lat: hit[0], lng: hit[1], label: o.sigungu };
     }
     if (o.sido && c.sido[o.sido]) return { lat: c.sido[o.sido][0], lng: c.sido[o.sido][1], label: o.sido };
+  }
+  return null;
+}
+
+/** 가장 가까운 시군구 이름 (위도·경도로 넣은 위치의 표시용) */
+export function nearestName(lat, lng) {
+  let best = null;
+  let bd = Infinity;
+  for (const [k, [a, b]] of Object.entries(regionCenters().sigungu)) {
+    const d = (a - lat) ** 2 + ((b - lng) * Math.cos((lat * Math.PI) / 180)) ** 2;
+    if (d < bd) { bd = d; best = k; }
+  }
+  return best ? best.split('|')[1].replace(/^(.+?시)(.+구)$/, '$1') : '';
+}
+
+/**
+ * 관리자가 넣은 '날씨 위치' 글을 위도·경도로. "35.18, 128.10" 또는 "경상남도 진주시"·"진주시"·"서울 강남구".
+ * 못 찾으면 null
+ */
+export function resolvePlace(text) {
+  const t = String(text || '').trim();
+  const m = t.match(/^(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)$/);
+  if (m) {
+    let [lat, lng] = [Number(m[1]), Number(m[2])];
+    if (lat > 100) [lat, lng] = [lng, lat]; // 경도·위도 순서로 넣은 경우
+    if (lat >= 32 && lat <= 39.5 && lng >= 124 && lng <= 132) return { lat, lng };
+    return null;
+  }
+  const c = regionCenters();
+  const words = t.split(/\s+/).filter(Boolean);
+  const sido = normalizeSido(words[0]);
+  const rest = (sido ? words.slice(1) : words).join('');
+  if (!rest) return sido && c.sido[sido] ? { lat: c.sido[sido][0], lng: c.sido[sido][1] } : null;
+  const keys = Object.keys(c.sigungu).filter((k) => (!sido || k.startsWith(`${sido}|`)) && k.split('|')[1] === rest);
+  if (keys.length !== 1) return null;
+  const [lat, lng] = c.sigungu[keys[0]];
+  return { lat, lng };
+}
+
+/** 로그인한 사용자 화면의 날씨 위치: 사용자 최상위 조직(여럿이면 위치를 아는 첫 조직) */
+export function userLocation(tree, user) {
+  for (const sn of userRoots(tree, user)) {
+    const loc = orgLocation(tree, sn);
+    if (loc) return loc;
   }
   return null;
 }

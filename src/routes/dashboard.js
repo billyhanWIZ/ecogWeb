@@ -7,6 +7,7 @@ import { buildStats, resolveSites, loadUsage } from '../lib/stats.js';
 import { signalStatus, currentDevices, cumulativeUses } from '../lib/usage.js';
 import { getSettings, impact } from '../lib/settings.js';
 import { q, one } from '../db.js';
+import { userLocation, weatherFor } from '../lib/weather.js';
 
 const r = Router();
 
@@ -72,6 +73,14 @@ r.get('/dashboard', requireAuth, wrap(async (req, res) => {
       .map(({ key, label, devices, uses, change }) => ({ key, label, devices, uses, change })),
     bySido: bySido.rows.map(({ key, label, devices, uses, co2Kg }) => ({ key, label, devices, uses, co2Kg })),
   });
+}));
+
+// 대시보드 시계 옆 날씨 (10분마다 다시 부른다)
+r.get('/weather', requireAuth, wrap(async (req, res) => {
+  const tree = await loadOrgs();
+  const w = await weatherFor(userLocation(tree, req.user)).catch(() => null);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ weather: w });
 }));
 
 export default r;

@@ -31,20 +31,23 @@ export default async function orgs(view, { params }) {
       data.sidoList.map((s) => h('option', { value: s, selected: o.sido === s }, s)));
     const sigungu = h('input', { value: o.sigungu || '', placeholder: o.sigunguInherited && !o.sigungu ? `상위 조직 따름 (${o.sigunguInherited})` : '예: 창원시', disabled: !editable });
     const address = h('input', { value: o.address || '', disabled: !editable });
+    const wxInit = o.weatherSet || '';
+    const wx = h('input', { value: wxInit, placeholder: o.weatherAuto ? `비우면 ${o.weatherAuto} (시군구·시도 기준)` : '예: 진주시, 서울 강남구, 35.18, 128.10', disabled: !editable });
     const mgr = h('input', { value: o.manager_name || '', disabled: !editable });
     const phone = h('input', { value: o.manager_phone || '', disabled: !editable });
 
     const save = async (e) => {
       e.preventDefault();
-      await api(`/api/orgs/${o.sn}`, { method: 'PATCH', body: { name: name.value, orgType: type.value, sido: sido.value, sigungu: sigungu.value, address: address.value, managerName: mgr.value, managerPhone: phone.value } });
+      await api(`/api/orgs/${o.sn}`, { method: 'PATCH', body: { name: name.value, orgType: type.value, sido: sido.value, sigungu: sigungu.value, address: address.value, managerName: mgr.value, managerPhone: phone.value, ...(wx.value.trim() !== wxInit ? { weatherPlace: wx.value } : {}) } });
       toast('저장했습니다');
       reload(o.sn);
     };
     const err = h('p', { class: 'err hidden' });
     const form = h('form', { onsubmit: (e) => save(e).catch((ex) => { err.textContent = ex.message; err.classList.remove('hidden'); }) },
       h('div', { class: 'row' }, field('이름', name), field('유형', type)),
-      h('div', { class: 'row' }, field('시도', sido, '지역 통계와 지도에 쓰입니다'), field('시군구', sigungu, 'TV 화면 날씨 위치로도 쓰입니다')),
+      h('div', { class: 'row' }, field('시도', sido, '지역 통계와 지도에 쓰입니다'), field('시군구', sigungu)),
       field('주소', address),
+      field('날씨 위치', wx, '대시보드·TV 화면 시계 옆 날씨. 시군구 이름이나 위도, 경도를 넣으세요. 비우면 시군구(없으면 시도) 중심'),
       h('div', { class: 'row' }, field('담당자', mgr), field('연락처', phone)),
       err,
       editable ? h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
