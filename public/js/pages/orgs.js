@@ -1,0 +1,128 @@
+import { api, go } from '../app.js';
+import { h, fmt, modal, field, toast } from '../ui.js';
+import { loadOrgTree, invalidateOrgTree, pickOrg, flatten } from './org-picker.js';
+
+const TYPE = { HQ: '본사', BRANCH: '지사·지역', SITE: '설치처' };
+
+export default async function orgs(view, { params }) {
+  const data = await loadOrgTree(true);
+  const all = flatten(data.roots);
+  const selected = all.find((x) => x.sn === Number(params.sn)) || all[0];
+  const reload = (sn) => { invalidateOrgTree(); go('orgs', { sn }, { replace: true }); };
+
+  const tree = h('ul', { class: 'tree' });
+  const node = (o) => h('li', null,
+    h('div', {
+      class: 'node', tabindex: '0', role: 'treeitem', 'aria-selected': String(o.sn === selected?.sn),
+      onclick: () => go('orgs', { sn: o.sn }),
+      onkeydown: (e) => { if (e.key === 'Enter') go('orgs', { sn: o.sn }); },
+    }, h('span', { class: 'type' }, TYPE[o.org_type] || o.org_type), o.name, h('span', { class: 'cnt' }, o.devicesTotal ? `${o.devicesTotal}대` : '')),
+    o.children.length ? h('ul', null, o.children.map(node)) : null);
+  data.roots.forEach((r) => tree.append(node(r)));
+
+  const left = h('section', { class: 'panel' },
+    h('header', null, h('h2', null, '조직'), data.canEdit && selected ? h('button', { class: 'btn small primary', onclick: () => addChild(selected.org) }, '하위 조직 추가') : null),
+    h('div', { class: 'body' }, all.length ? tree : h('div', { class: 'empty' }, '조직이 없습니다')));
+
+  const right = selected ? detail(selected.org) : h('div');
+  view.replaceChildren(
+    h('div', { class: 'head' }, h('div', null, h('h1', null, '조직'),
+      h('p', { class: 'faint', style: { margin: '2px 0 0', fontSize: '13px' } }, '고객사 → 지사·지역 → 설치처 순으로 묶습니다. 장비는 설치처에 배정합니다.'))),
+    h('div', { class: 'grid', style: { gridTemplateColumns: 'minmax(260px, 1fr) 1.4fr', alignItems: 'start' } }, left, right));
+
+  function detail(o) {
+    const editable = data.canEdit;
+    const name = h('input', { value: o.name, required: true, disabled: !editable });
+    const type = h('select', { disabled: !editable }, Object.entries(TYPE).map(([k, v]) => h('option', { value: k, selected: o.org_type === k }, v)));
+    const sido = h('select', { disabled: !editable },
+      h('option', { value: '' }, o.sidoInherited && !o.sido ? `상위 조직 따름 (${o.sidoInherited})` : '지정 안 함'),
+      data.sidoList.map((s) => h('option', { value: s, selected: o.sido === s }, s)));
+    const sigungu = h('input', { value: o.sigungu || '', placeholder: o.sigunguInherited && !o.sigungu ? `상위 조직 따름 (${o.sigunguInherited})` : '예: 창원시', disabled: !editable });
+    const address = h('input', { value: o.address || '', disabled: !editable });
+    const mgr = h('input', { value: o.manager_name || '', disabled: !editable });
+    const phone = h('input', { value: o.manager_phone || '', disabled: !editable });
+
+    const save = async (e) => {
+      e.preventDefault();
+      await api(`/api/orgs/${o.sn}`, { method: 'PATCH', body: { name: name.value, orgType: type.value, sido: sido.value, sigungu: sigungu.value, address: address.value, managerName: mgr.value, managerPhone: phone.value } });
+      toast('저장했습니다');
+      reload(o.sn);
+    };
+    const err = h('p', { class: 'err hidden' });
+    const form = h('form', { onsubmit: (e) => save(e).catch((ex) => { err.textContent = ex.message; err.classList.remove('hidden'); }) },
+      h('div', { class: 'row' }, field('이름', name), field('유형', type)),
+      h('div', { class: 'row' }, field('시도', sido, '지역 통계와 지도에 쓰입니다'), field('시군구', sigungu)),
+      field('주소', address),
+      h('div', { class: 'row' }, field('담당자', mgr), field('연락처', phone)),
+      err,
+      editable ? h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+        h('button', { class: 'btn primary', type: 'submit' }, '저장'),
+        h('button', { class: 'btn', type: 'button', onclick: () => move(o) }, '다른 조직 아래로 옮기기'),
+        h('button', { class: 'btn danger', type: 'button', onclick: () => remove(o) }, '삭제')) : null);
+
+    // 로고
+    const file = h('input', { type: 'file', accept: '.png,.jpg,.jpeg,.svg,.webp', class: 'hidden' });
+    file.addEventListener('change', async () => {
+      if (!file.files[0]) return;
+      const fd = new FormData();
+      fd.append('logo', file.files[0]);
+      try {
+        await api(`/api/orgs/${o.sn}/logo`, { method: 'POST', body: fd });
+        toast('로고를 바꿨습니다');
+        reload(o.sn);
+      } catch (ex) { toast(ex.message); }
+    });
+    const logo = h('section', { class: 'panel' },
+      h('header', null, h('h2', null, '로고'), h('p', null, '비워 두면 상위 조직 로고를 씁니다. 화면 왼쪽 위와 PDF 표지에 들어갑니다.')),
+      h('div', { class: 'body', style: { display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' } },
+        h('img', { src: o.logoUrl || '/img/ecog-logo.svg', alt: `${o.name} 로고`, style: { height: '44px', maxWidth: '200px', objectFit: 'contain', border: '1px solid var(--line)', borderRadius: '6px', padding: '4px 8px', background: '#fff' } }),
+        editable ? h('button', { class: 'btn small', type: 'button', onclick: () => file.click() }, '로고 올리기') : null,
+        editable && o.logo_path ? h('button', { class: 'btn small danger', type: 'button', onclick: async () => { await api(`/api/orgs/${o.sn}/logo`, { method: 'DELETE' }); reload(o.sn); } }, '이 조직 로고 지우기') : null,
+        h('span', { class: 'faint', style: { fontSize: '12.5px' } }, 'PNG·JPG·SVG, 1MB 이하'), file));
+
+    const devs = h('section', { class: 'panel' },
+      h('header', null, h('h2', null, `장비 ${fmt.int(o.devicesTotal)}대`), h('a', { href: `#/stats?by=${o.children.length ? 'org' : 'device'}&${o.children.length ? 'org' : 'site'}=${o.sn}` }, '이 조직 통계 보기')),
+      h('div', { class: 'body' }, h('p', { class: 'muted', style: { margin: 0, fontSize: '14px' } },
+        o.devices ? `이 조직에 바로 배정된 장비 ${o.devices}대, 하위 조직 포함 ${o.devicesTotal}대입니다.` : `하위 조직 포함 ${o.devicesTotal}대입니다. 장비 배정은 장비 화면에서 합니다.`)));
+
+    return h('div', { class: 'grid' },
+      h('section', { class: 'panel' }, h('header', null, h('h2', null, selected.path)), h('div', { class: 'body' }, form)),
+      logo, devs);
+  }
+
+  function addChild(parent) {
+    const name = h('input', { required: true, maxlength: 100 });
+    const type = h('select', null, Object.entries(TYPE).map(([k, v]) => h('option', { value: k, selected: k === (parent.org_type === 'HQ' ? 'BRANCH' : 'SITE') }, v)));
+    const sido = h('select', null, h('option', { value: '' }, parent.sidoInherited ? `상위 조직 따름 (${parent.sidoInherited})` : '지정 안 함'), data.sidoList.map((s) => h('option', { value: s }, s)));
+    modal(`${parent.name} 아래에 추가`, [field('이름', name), field('유형', type), field('시도', sido)], {
+      submitLabel: '추가',
+      onSubmit: async () => {
+        const r = await api('/api/orgs', { method: 'POST', body: { parentSn: parent.sn, name: name.value, orgType: type.value, sido: sido.value } });
+        toast('추가했습니다');
+        reload(r.sn);
+      },
+    });
+  }
+
+  function move(o) {
+    const excl = flatten([o]).map((x) => x.sn);
+    pickOrg(async (target) => {
+      try {
+        await api(`/api/orgs/${o.sn}`, { method: 'PATCH', body: { parentSn: target.sn } });
+        toast(`${target.name} 아래로 옮겼습니다`);
+        reload(o.sn);
+      } catch (ex) { toast(ex.message); }
+    }, { exclude: excl, title: `${o.name}을(를) 어디로 옮길까요` });
+  }
+
+  function remove(o) {
+    modal('조직 삭제', h('p', null, `${o.name}을(를) 삭제합니다. 하위 조직·배정 장비·사용자가 없어야 삭제할 수 있습니다. 과거 통계는 남습니다.`), {
+      submitLabel: '삭제', danger: true,
+      onSubmit: async () => {
+        await api(`/api/orgs/${o.sn}`, { method: 'DELETE' });
+        toast('삭제했습니다');
+        reload(o.parent_sn || '');
+      },
+    });
+  }
+}

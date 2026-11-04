@@ -1,0 +1,29 @@
+{
+  "name": "ecogweb",
+  "version": "0.1.0",
+  "description": "ecoG 텀블러 세척기 모니터링 2.0",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "migrate": "node scripts/db-migrate.js",
+    "migrate:legacy": "node scripts/migrate-legacy.js",
+    "seed:dev": "node dev/seed-legacy.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cookie-session": "^2.1.0",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.11.5"
+  }
+}

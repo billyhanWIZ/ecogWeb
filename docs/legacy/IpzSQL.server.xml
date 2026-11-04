@@ -1,0 +1,465 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN" 
+"http://ibatis.apache.org/dtd/sql-map-2.dtd">
+
+<sqlMap namespace="IpzSQL">    
+	<typeAlias alias="IpzLicenseChkVO" type="com.restapi.web.vo.IpzLicenseChkVO" />
+	<typeAlias alias="IpzInterfaceDTO" type="com.restapi.web.dto.IpzInterfaceDTO" />
+	<typeAlias alias="KidszoneInterfaceDTO" type="com.restapi.web.dto.KidszoneInterfaceDTO" />
+	<typeAlias alias="KidszoneAddressChkVO" type="com.restapi.web.vo.KidszoneAddressChkVO" />
+	<typeAlias alias="JnMgameRankingsVO" type="com.restapi.web.vo.JnMgameRankingsVO" />
+	<typeAlias alias="JnInterfaceDTO" type="com.restapi.web.dto.JnInterfaceDTO" />
+	
+	<typeAlias alias="EgUserInfoVO" type="com.restapi.web.vo.EgUserInfoVO" />
+	<typeAlias alias="EgUserInfoDTO" type="com.restapi.web.dto.EgUserInfoDTO" />
+	
+	<typeAlias alias="EgCountDataVO" type="com.restapi.web.vo.EgCountDataVO" />
+	<typeAlias alias="EgInstallDataVO" type="com.restapi.web.vo.EgInstallDataVO" />
+	
+	
+	<typeAlias alias="EgDeviceInfoVO" type="com.restapi.web.vo.EgDeviceInfoVO" />
+	<typeAlias alias="EgCleanCountVO" type="com.restapi.web.vo.EgCleanCountVO" />
+	<typeAlias alias="EgDeviceInfoDTO" type="com.restapi.web.dto.EgDeviceInfoDTO" />
+	<typeAlias alias="EgCleanCountDTO" type="com.restapi.web.dto.EgCleanCountDTO" />
+	 
+    <resultMap id="IpzLicenseChkVOMap" class="IpzLicenseChkVO">
+		<result property="licensekey" column="LICENSEKEY" />
+		<result property="orgname" column="ORGNAME" />
+		<result property="svcgbn" column="SVCGBN" />
+		<result property="status" column="STATUS" />
+		<result property="startdate" column="STARTDATE" />
+		<result property="enddate" column="ENDDATE" />
+		<result property="cancontents" column="CANCONTENTS" />
+		<result property="tmplicensekey" column="TMPLICENSEKEY" />
+		<result property="mirrorchk" column="MIRRORCHK" />
+		<result property="updatetime" column="UPDATETIME" />		
+		<result property="chromakeyrgb" column="CHROMAKEYRGB" />
+		<result property="bright" column="BRIGHT" />
+		<result property="logoint" column="LOGOINT" />
+		<result property="curversion" column="CURVERSION" />
+		<!-- #COLUMN_LOOP_1# -->
+	</resultMap>
+	
+    <resultMap id="KidszoneInterfaceVOMap" class="KidszoneAddressChkVO">
+		<result property="requestaddress" column="REQUESTADDRESS" />
+		<!-- #COLUMN_LOOP_1# -->
+	</resultMap>
+	
+    <resultMap id="JnMgameRankingsVOMap" class="JnMgameRankingsVO">
+		<result property="sn" column="SN" />
+		<result property="gamegbn" column="GAMEGBN" />
+		<result property="id" column="ID" />
+		<result property="score" column="SCORE" />
+		<result property="totalscore" column="TOTALSCORE" />
+		<result property="ranking" column="RANKING" />
+		<!-- #COLUMN_LOOP_1# -->
+	</resultMap>
+	
+    
+    <resultMap id="EgUserInfoVOMap" class="EgUserInfoVO">
+		<result property="sn" column="SN" />
+		<result property="userid" column="USERID" />
+		<result property="username" column="USERNAME" />
+		<result property="password" column="PASSWORD" />
+		<result property="managegroup" column="MANAGEGROUP" />
+		<result property="startdate" column="STARTDATE" />
+		<result property="enddate" column="ENDDATE" />
+		<!-- #COLUMN_LOOP_1# -->
+	</resultMap>
+	
+    
+    <resultMap id="EgCountDataVOMap" class="EgCountDataVO">
+		<result property="devicecount" column="DEVICECOUNT" />
+		<result property="cleancount" column="CLEANCOUNT" />
+		<result property="co2value" column="CO2VALUE" />
+		<result property="treevalue" column="TREEVALUE" />
+		<!-- #COLUMN_LOOP_1# -->
+	</resultMap>
+	
+    <resultMap id="EgDeviceInfoVOMap" class="EgDeviceInfoVO">
+		<result property="sn" column="SN" />
+		<result property="deviceid" column="DEVICEID" />
+		<result property="devicename" column="DEVICENAME" />
+		<!-- #COLUMN_LOOP_1# -->
+	</resultMap>
+	
+    <resultMap id="EgCleanCountVOMap" class="EgCleanCountVO">
+		<result property="sn" column="SN" />
+		<result property="deviceid" column="DEVICEID" />
+		<result property="cleandate" column="CLEANDATE" />
+		<result property="cleancount" column="CLEANCOUNT" />
+		<!-- #COLUMN_LOOP_1# -->
+	</resultMap>
+	
+    <resultMap id="EgInstallDataVOMap" class="EgInstallDataVO">
+        <result property="installdate" column="INSTALLDATE" />
+        <result property="installname" column="INSTALLNAME" />
+        <result property="deviceid" column="DEVICEID" />
+		<result property="devicecount" column="DEVICECOUNT" />
+		<result property="cleancount" column="CLEANCOUNT" />
+		<result property="co2value" column="CO2VALUE" />
+		<result property="treevalue" column="TREEVALUE" />
+		<result property="devicelife" column="DEVICELIFE" />
+		<!-- #COLUMN_LOOP_1# -->
+	</resultMap>
+    
+    
+    <select id="getEgUserInfo" resultMap="EgUserInfoVOMap" parameterClass="EgUserInfoDTO">
+        SELECT 
+        	SN
+        	,USERID
+        	,USERNAME
+        	,PASSWORD
+        	,MANAGEGROUP
+        	,'' STARTDATE
+        	,'' ENDDATE
+        FROM EG_USERINFO
+        WHERE USERID = #userid# AND PASSWORD = #password#
+        LIMIT 1        
+    </select>
+    
+    <select id="getEgCountData" resultMap="EgCountDataVOMap" parameterClass="EgUserInfoDTO">
+		 SELECT COUNT(1) AS DEVICECOUNT
+       , SUM(C.cleancount) AS CLEANCOUNT
+       , SUM(C.cleancount) * 52 / 1000000 AS CO2VALUE
+       , SUM(C.cleancount) * 0.0078787878 AS TREEVALUE
+		FROM EG_DEVICEINFO I
+		JOIN (
+		    SELECT deviceid, SUM(cleancount) cleancount 
+		    FROM EG_CLEANCOUNT 
+		    GROUP BY deviceid
+		) C ON C.deviceid = I.deviceid
+		JOIN EG_MANAGEGROUP M ON I.mangegroup = M.SN
+		JOIN EG_USERINFO U ON U.USERID = #userid#
+		WHERE M.UPCODE = U.MANAGEGROUP OR M.SN = U.MANAGEGROUP
+		LIMIT 1;
+    </select>
+    
+    
+    <select id="getEgCountDataAll" resultMap="EgCountDataVOMap" parameterClass="EgUserInfoDTO">
+          SELECT 
+			 SUM(DC) AS DEVICECOUNT 
+        , SUM(TC) AS CLEANCOUNT
+        , SUM(Co2T) AS CO2VALUE
+        , SUM(Tree) AS TREEVALUE
+			FROM EG_DEVICEINFO I
+			JOIN (
+			    SELECT DEVICEID , 1 DC , SUM(C.cleancount) TC
+					, SUM(C.cleancount) * 52 / 1000000 Co2T
+					, SUM(C.cleancount) * 0.0078787878 Tree FROM EG_CLEANCOUNT C
+				GROUP BY DEVICEID ) C ON C.deviceid = I.deviceid AND I.mangegroup > 0
+    </select>
+    
+    
+    
+    <select id="getEgDeviceCleanCount" resultMap="EgCleanCountVOMap" parameterClass="EgCleanCountDTO">
+        SELECT '0' AS SN ,
+        		'0' AS DEVICEID ,
+        		'0' AS CLEANDATE ,
+        		SUM(CLEANCOUNT) AS CLEANCOUNT
+        FROM EG_CLEANCOUNT
+        WHERE DEVICEID = #deviceid#
+        LIMIT 1        
+    </select>
+    
+    <select id="getUsageData" resultMap="EgInstallDataVOMap" parameterClass="EgCleanCountDTO"> 
+        SELECT 
+		    DateSeries.Date AS INSTALLDATE,
+		    '' AS INSTALLNAME,
+		    '' AS DEVICEID,
+		    0 AS DEVICECOUNT,
+		    COALESCE(SUM(c.cleancount), 0) AS CLEANCOUNT,
+		    COALESCE(SUM(c.cleancount), 0) * 52 / 1000000 AS CO2VALUE,
+		    COALESCE(SUM(c.cleancount), 0) * 0.0078787878 AS TREEVALUE,
+		    '' AS DEVICELIFE
+		FROM (
+		    SELECT CURRENT_DATE() AS Date
+		    UNION ALL SELECT CURRENT_DATE() - INTERVAL 1 DAY
+		    UNION ALL SELECT CURRENT_DATE() - INTERVAL 2 DAY
+		    UNION ALL SELECT CURRENT_DATE() - INTERVAL 3 DAY
+		    UNION ALL SELECT CURRENT_DATE() - INTERVAL 4 DAY
+		    UNION ALL SELECT CURRENT_DATE() - INTERVAL 5 DAY
+		    UNION ALL SELECT CURRENT_DATE() - INTERVAL 6 DAY
+		) AS DateSeries
+		LEFT JOIN eg_cleancount c ON DateSeries.Date = c.cleandate AND c.deviceid = #deviceid#
+		LEFT JOIN eg_deviceinfo d ON c.deviceid = d.deviceid
+		GROUP BY DateSeries.Date, d.devicename
+		ORDER BY DateSeries.Date    	
+    </select>
+    <select id="getInstallDataList" resultMap="EgInstallDataVOMap" parameterClass="EgUserInfoDTO">
+        SELECT 
+		    CASE WHEN COUNT(DISTINCT I.deviceid) = 1 THEN 
+		         STR_TO_DATE(SUBSTRING(MAX(I.deviceid),8,8) , '%Y%m%d') 
+		    ELSE
+		        ''
+		    END AS INSTALLDATE,
+		    CASE 
+		        WHEN U.LEVEL = 0 THEN M2.GROUPNAME
+		        WHEN U.LEVEL = 1 THEN M.GROUPNAME
+		        ELSE I.DEVICENAME 
+		    END AS INSTALLNAME,
+		    MAX(I.deviceid) AS DEVICEID,
+		    COUNT(DISTINCT I.deviceid) AS DEVICECOUNT,
+		    COALESCE(SUM(C.cleancount), 0) AS CLEANCOUNT,
+		    COALESCE(SUM(C.cleancount), 0) * 52 / 1000000 AS CO2VALUE,
+		    COALESCE(SUM(C.cleancount), 0) * 0.0078787878 AS TREEVALUE,
+		    CASE WHEN COUNT(DISTINCT I.deviceid) = 1 THEN 
+		           CASE WHEN MAX(I.lastsignaldt) > DATE_SUB(NOW(), INTERVAL 10 MINUTE) THEN 'S'
+		           ELSE 'F'
+		           END
+		    ELSE ''
+		    END AS DEVICELIFE
+		FROM EG_DEVICEINFO I
+		LEFT JOIN (
+		    SELECT deviceid, SUM(cleancount) cleancount 
+		    FROM EG_CLEANCOUNT
+		    WHERE cleandate BETWEEN STR_TO_DATE(#startdate#, '%m/%d/%Y')  AND STR_TO_DATE(#enddate#, '%m/%d/%Y') 
+		    GROUP BY deviceid
+		) C ON I.deviceid = C.deviceid
+		JOIN EG_MANAGEGROUP M ON I.mangegroup = M.SN
+		LEFT JOIN EG_MANAGEGROUP M2 ON M.UPCODE = M2.SN
+		JOIN EG_USERINFO U ON U.USERID = #userid#
+		WHERE U.LEVEL = 0 OR (
+		      (U.LEVEL = 1 AND U.MANAGEGROUP = M.UPCODE) 
+		      OR 
+		      (U.LEVEL = 2 AND U.MANAGEGROUP = M.SN)
+		)
+		GROUP BY 
+		    CASE 
+		        WHEN U.LEVEL = 0 THEN M2.GROUPNAME
+		        WHEN U.LEVEL = 1 THEN M.GROUPNAME
+		        ELSE I.DEVICENAME 
+		    END
+		ORDER BY COALESCE(SUM(C.cleancount), 0) DESC
+	</select>
+    
+    <select id="getEgDeviceInfo" resultMap="EgDeviceInfoVOMap" parameterClass="EgDeviceInfoDTO">
+        SELECT 
+        	SN
+        	,DEVICEID
+        	,DEVICENAME
+        FROM EG_DEVICEINFO
+        WHERE DEVICEID = #deviceid#
+        LIMIT 1        
+    </select>
+    
+    <select id="getEgCleanCount" resultMap="EgCleanCountVOMap" parameterClass="EgCleanCountDTO">
+        SELECT 
+        	SN
+        	,DEVICEID
+        	,CLEANDATE
+        	,CLEANCOUNT
+        FROM EG_CLEANCOUNT
+        WHERE DEVICEID = #deviceid# 
+        	AND CLEANDATE >= DATE_FORMAT(NOW(),'%Y-01-01') 
+        LIMIT 1        
+    </select>
+    
+    <select id="getEgDailyCleanCount" resultMap="EgCleanCountVOMap" parameterClass="EgCleanCountDTO">
+        SELECT 
+        	SN
+        	,DEVICEID
+        	,CLEANDATE
+        	,CLEANCOUNT
+        FROM EG_CLEANCOUNT
+        WHERE DEVICEID = #deviceid# AND CLEANDATE = #cleandate#
+        LIMIT 1        
+    </select>
+    
+    <insert id="insertEgDeviceInfo" parameterClass="EgDeviceInfoDTO">
+		INSERT INTO EG_DEVICEINFO
+		( DEVICEID , DEVICENAME , LASTSIGNALDT)
+		VALUES 
+		( #deviceid# , 
+			#devicename# , 
+			NOW() 
+		)
+	</insert> 
+	
+    <insert id="insertEgCleanCount" parameterClass="EgCleanCountDTO">
+		INSERT INTO EG_CLEANCOUNT
+		( DEVICEID , CLEANDATE , CLEANCOUNT )
+		VALUES 
+		( #deviceid# , 
+			DATE_FORMAT(NOW(),'%Y-%m-%d') , 
+			#cleancount#
+		)
+	</insert> 
+	
+    <insert id="insertEgDailyCleanCount" parameterClass="EgCleanCountDTO">
+		INSERT INTO EG_CLEANCOUNT
+		( DEVICEID , CLEANDATE , CLEANCOUNT )
+		VALUES 
+		( #deviceid# , 
+			#cleandate# , 
+			#cleancount#
+		)
+	</insert> 
+	
+    <update id="updateEgDeviceInfo" parameterClass="EgDeviceInfoDTO">
+		UPDATE	EG_DEVICEINFO
+		SET		DEVICENAME=#devicename#
+		WHERE	1=1
+		AND DEVICEID=#deviceid# 
+		LIMIT 1
+	</update> 
+	
+    
+    <update id="updateClientStatus" parameterClass="EgDeviceInfoDTO">
+		UPDATE	EG_DEVICEINFO
+		SET		LASTSIGNALDT=NOW()
+		WHERE	1=1
+		AND DEVICEID=#deviceid# 
+		LIMIT 1
+	</update> 
+    
+    <update id="updateEgCleanCount" parameterClass="EgCleanCountDTO">
+		UPDATE	EG_CLEANCOUNT
+		SET		CLEANCOUNT=#cleancount#
+		WHERE	1=1
+		AND DEVICEID=#deviceid# AND CLEANDATE = DATE_FORMAT(NOW(),'%Y-%m-%d')
+		LIMIT 1
+	</update> 
+	
+    <update id="updateEgDailyCleanCount" parameterClass="EgCleanCountDTO">
+		UPDATE	EG_CLEANCOUNT
+		SET		CLEANCOUNT=#cleancount#
+		WHERE	1=1
+		AND DEVICEID=#deviceid# AND CLEANDATE = #cleandate#
+		LIMIT 1
+	</update> 
+    
+    <select id="getLicenseInfo" resultMap="IpzLicenseChkVOMap" parameterClass="IpzInterfaceDTO">
+		/* selectLicenseTab */
+		SELECT	
+				LICENSEKEY
+				,ORGNAME
+				,SVCGBN
+				,STATUS
+				,STARTDATE
+				,ENDDATE
+				,CANCONTENTS
+				,TMPLICENSEKEY
+				,MIRRORCHK
+				,UPDATETIME
+				,CHROMAKEYRGB
+				,BRIGHT
+				,LOGOINT
+				,CURVERSION
+		FROM	IPZ_LICENSE_CHK
+		WHERE   1=1
+		AND LICENSEKEY=#licensekey# AND SVCGBN=#svcgbn#
+		LIMIT 1
+	</select>
+	
+    <select id="getkidszoneAddressInfo" resultMap="KidszoneInterfaceVOMap" parameterClass="KidszoneInterfaceDTO">
+		/* selectLicenseTab */
+		SELECT	
+				REQUESTADDRESS
+		FROM	KIDSZONELICENSE
+		WHERE   1=1
+		AND REQUESTADDRESS=#requestaddress# 
+		LIMIT 1
+	</select>
+    
+    
+    
+    <update id="setProgrameVersion" parameterClass="IpzInterfaceDTO">
+		/* versionUpdate */
+		UPDATE	IPZ_LICENSE_CHK
+		SET		CURVERSION=#curversion#
+		WHERE	1=1
+		AND LICENSEKEY=#licensekey# AND SVCGBN=#svcgbn#
+		LIMIT 1
+	</update> 
+	
+    <update id="setProgrameConfig" parameterClass="IpzInterfaceDTO">
+		/* versionUpdate */
+		UPDATE	IPZ_LICENSE_CHK
+		SET		MIRRORCHK=#mirrorchk# 
+				, CHROMAKEYRGB=#chromakeyrgb#
+				, BRIGHT=#bright#
+		WHERE	1=1
+		AND LICENSEKEY=#licensekey# AND SVCGBN=#svcgbn#
+		LIMIT 1
+	</update> 
+	
+    <insert id="setGameuseStatus" parameterClass="IpzInterfaceDTO">
+		INSERT INTO GAMEUSE_STATUS
+		( LICENSEKEY , SVCGBN , GAMENAME , GAMETIMESTAMP)
+		VALUES 
+		( #licensekey# , 
+			#svcgbn# ,
+			#gamename# , 
+			DATE_ADD(NOW(), INTERVAL 9 HOUR)  
+		)
+	</insert> 
+	
+    <select id="getRankingInfo" resultMap="JnMgameRankingsVOMap" parameterClass="JnInterfaceDTO">
+		SELECT	
+				SN
+				, GAMEGBN
+				, ID
+				, SCORE
+				, TOTALSCORE
+				, RANKING 
+		FROM	MGAME_RANKINGS
+		WHERE   1=1
+		AND GAMEGBN=#gamegbn# AND ID=#id#
+		LIMIT 1
+	</select>
+	
+    <insert id="insertGameScore" parameterClass="JnInterfaceDTO">
+		INSERT INTO MGAME_RANKINGS
+		( GAMEGBN , ID , SCORE , TOTALSCORE , UPDATETIME)
+		VALUES 
+		( #gamegbn# , 
+			#id# ,
+			#score# , 
+			#totalscore# ,
+			DATE_ADD(NOW(), INTERVAL 9 HOUR)  
+		)
+	</insert> 
+	
+    <update id="updateGameScore" parameterClass="JnInterfaceDTO">
+		UPDATE	MGAME_RANKINGS
+		SET		SCORE = GREATEST( #score# , SCORE)  
+				, TOTALSCORE = GREATEST ( #totalscore# , TOTALSCORE)
+				, UPDATETIME = DATE_ADD(NOW(), INTERVAL 9 HOUR)  
+		WHERE	1=1
+		AND GAMEGBN=#gamegbn# AND ID=#id#
+		LIMIT 1
+	</update> 
+	
+    <update id="updateRankings" parameterClass="JnInterfaceDTO">
+		UPDATE MGAME_RANKINGS U ,
+		 (
+			SELECT
+			    sn, score, id,
+			    ( @rank := @rank + 1 ) AS RANK,
+			    ( @real_rank := IF ( @last > score, @real_rank:=@real_rank+1, @real_rank ) ) AS REAL_RANK,
+			    ( @last := score )
+			FROM
+			     MGAME_RANKINGS AS a ,
+			    ( SELECT @rank := 0, @last := 0, @real_rank := 1 ) AS b 
+			WHERE a.GAMEGBN = 'LGGM' 
+			ORDER BY
+			    a.score DESC ) R
+			SET U.RANKING = R.REAL_RANK , U.SERIALRANKING = R.RANK
+			WHERE U.ID = R.ID
+	</update> 
+
+    <select id="getRankingInfoList" resultMap="JnMgameRankingsVOMap" parameterClass="JnInterfaceDTO">
+        SELECT SN, GAMEGBN	, ID, SCORE , TOTALSCORE , RANKING FROM (
+		SELECT SN, GAMEGBN	, ID, SCORE, TOTALSCORE , RANKING , SERIALRANKING , M.MYRANKING MYRANING, M.TOTAL TOTAL
+			FROM MGAME_RANKINGS S , 
+			( SELECT SUM(CASE WHEN ID = #id# THEN SERIALRANKING ELSE 0 END) AS MYRANKING , COUNT(1) AS TOTAL FROM MGAME_RANKINGS ) M 
+		ORDER BY RANKING ) R
+		WHERE GAMEGBN=#gamegbn# AND
+				SERIALRANKING BETWEEN 
+				CASE WHEN (R.TOTAL - R.MYRANING) <![CDATA[ < ]]> 2 THEN  R.MYRANING - 2 - (2 - (R.TOTAL - R.MYRANING)) ELSE R.MYRANING - 2 END
+				AND 
+		    	CASE WHEN R.MYRANING  <![CDATA[ > ]]> 2 THEN R.MYRANING + 2 ELSE R.MYRANING + 2 + ( 3 - R.MYRANING ) END
+		LIMIT 5
+	</select>
+</sqlMap>
