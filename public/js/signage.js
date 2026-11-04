@@ -1,4 +1,4 @@
-// 사이니지: 1분마다 숫자를 새로 받아온다
+// 사이니지: 시계는 1초마다, 숫자는 30초마다 새로 고친다
 const token = location.pathname.split('/').pop();
 const nf = new Intl.NumberFormat('ko-KR');
 const $ = (id) => document.getElementById(id);
@@ -31,11 +31,36 @@ async function load() {
       col.append(bar, label);
       return col;
     }));
-    $('updated').textContent = `${d.updatedAt} 기준`;
+    lastOk = new Date();
+    $('updated').textContent = `${hm(lastOk)} 기준`;
   } catch (e) {
     if (e.message === '404') $('err').hidden = false;
   }
 }
 
+const pad = (n) => String(n).padStart(2, '0');
+const hm = (t) => `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+let lastOk = null;
+let lastDay = new Date().getDate();
+
+function tick() {
+  const t = new Date();
+  const clock = $('clock');
+  clock.dateTime = t.toISOString();
+  clock.innerHTML = '';
+  const b = document.createElement('b');
+  b.textContent = `${hm(t)}:${pad(t.getSeconds())}`;
+  const small = document.createElement('small');
+  small.textContent = `${t.getFullYear()}.${pad(t.getMonth() + 1)}.${pad(t.getDate())} (${DAYS[t.getDay()]})`;
+  clock.append(b, small);
+  // 날짜가 바뀌면 '오늘'·'이번 달' 숫자를 바로 다시 받는다
+  if (t.getDate() !== lastDay) { lastDay = t.getDate(); load(); }
+  // 2분 넘게 못 받아오면 표시
+  if (lastOk && t - lastOk > 120_000) $('updated').textContent = `${hm(lastOk)} 기준 · 연결을 다시 시도하는 중`;
+}
+
+tick();
+setInterval(tick, 1000);
 load();
-setInterval(load, 60_000);
+setInterval(load, 30_000);

@@ -12,6 +12,7 @@ import { config } from '../config.js';
 
 const r = Router();
 const cache = new Map(); // token → { at, data }
+const cumCache = new Map(); // 설치처 목록 → { at, row }
 
 async function orgByToken(token) {
   if (!/^[A-Za-z0-9_-]{16,60}$/.test(token || '')) throw httpError(404, '없는 화면입니다');
@@ -25,8 +26,21 @@ async function orgByToken(token) {
 
 r.get('/signage/:token', wrap(async (req, res) => {
   const hit = cache.get(req.params.token);
-  if (hit && Date.now() - hit.at < 30_000) return res.json(hit.data);
-  const { tree, org } = await orgByToken(req.params.token);
+  if (hit && Date.now() - hit.at < 15_000) return res.json(await hit.data); // 같은 링크를 여러 TV 가 열어도 15초에 한 번만 DB 조회
+  const job = compute(req.params.token);
+  cache.set(req.params.token, { at: Date.now(), data: job });
+  try {
+    const data = await job;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(data);
+  } catch (e) {
+    cache.delete(req.params.token);
+    throw e;
+  }
+}));
+
+async function compute(token) {
+  const { tree, org } = await orgByToken(token);
   const s = await getSettings();
   const sites = descendants(tree, org.sn);
   const today = todayKST();
@@ -34,12 +48,19 @@ r.get('/signage/:token', wrap(async (req, res) => {
   const from14 = addDays(today, -13);
   const daily = await dailyUsage(sites, from14 < yearFrom ? from14 : yearFrom, today);
   const sumWhere = (f) => daily.filter(f).reduce((x, d) => x + d.cnt, 0);
-  const cum = await one(
+  // 전체 누적은 테이블 전체를 훑으니 1분에 한 번만 계산
+  const cumKey = sites.join(',');
+  let cumHit = cumCache.get(cumKey);
+  if (!cumHit || Date.now() - cumHit.at > 60_000) {
+    cumHit = { at: Date.now(), row: await one(
     `SELECT COALESCE(SUM(x.cnt), 0) AS uses FROM (
        SELECT deviceid, cleandate, MAX(cleancount) cnt FROM eg_cleancount GROUP BY deviceid, cleandate
      ) x JOIN eg_device_site a ON a.deviceid = x.deviceid AND x.cleandate >= a.installed_on
        AND (a.removed_on IS NULL OR x.cleandate < a.removed_on)
-     WHERE a.site_sn IN (?)`, [sites]);
+     WHERE a.site_sn IN (?)`, [sites]) };
+    cumCache.set(cumKey, cumHit);
+  }
+  const cum = cumHit.row;
   const current = await q('SELECT deviceid FROM eg_device_site WHERE removed_on IS NULL AND site_sn IN (?)', [sites]);
   const sig = await signalStatus(current.map((c) => c.deviceid));
   const online = current.filter((c) => (sig.get(c.deviceid)?.ago ?? Infinity) <= s.offline_seconds).length;
@@ -49,7 +70,7 @@ r.get('/signage/:token', wrap(async (req, res) => {
   const cumUses = Number(cum.uses);
   const data = {
     name: org.name,
-    logo: inherited(tree, org.sn, 'logo_path') ? `/api/signage/${req.params.token}/logo` : '/img/ecog-logo-white.png',
+    logo: inherited(tree, org.sn, 'logo_path') ? `/api/signage/${token}/logo` : '/img/ecog-logo-white.png',
     logoCustom: !!inherited(tree, org.sn, 'logo_path'),
     today: sumWhere((d) => d.d === today),
     month: sumWhere((d) => d.d.slice(0, 7) === today.slice(0, 7)),
@@ -62,10 +83,8 @@ r.get('/signage/:token', wrap(async (req, res) => {
     last14: eachDay(from14, today).map((d) => ({ d, uses: byDay.get(d) || 0 })),
     updatedAt: new Date(Date.now() + 9 * 3600_000).toISOString().slice(11, 16),
   };
-  cache.set(req.params.token, { at: Date.now(), data });
-  res.setHeader('Cache-Control', 'no-store');
-  res.json(data);
-}));
+  return data;
+}
 
 r.get('/signage/:token/logo', wrap(async (req, res) => {
   const { tree, org } = await orgByToken(req.params.token);
@@ -79,6 +98,7 @@ r.get('/signage/:token/logo', wrap(async (req, res) => {
 
 export function clearSignageCache() {
   cache.clear();
+  cumCache.clear();
 }
 
 export default r;
