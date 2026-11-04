@@ -1,5 +1,7 @@
 import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieSession from 'cookie-session';
@@ -29,7 +31,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
       fontSrc: ["'self'", 'https://cdn.jsdelivr.net', 'data:'],
       imgSrc: ["'self'", 'data:', 'blob:'],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", 'https://cdn.jsdelivr.net'], // 글꼴 CSS 의 source map
       upgradeInsecureRequests: config.isProd ? [] : null,
     },
   },
@@ -65,19 +67,41 @@ app.use('/api', (_req, res) => res.status(404).json({ error: '없는 API 입니�
 app.use('/api', errorHandler);
 
 const pub = path.join(config.root, 'public');
-// 화면 코드(js·css·html)는 매번 서버에 바뀌었는지 묻는다(ETag) → 배포하면 바로 반영.
-// 사진·로고·지도·라이브러리처럼 거의 안 바뀌는 파일만 하루 캐시.
+
+// 배포 버전: 화면 코드 주소에 넣어(/v/<버전>/js/...) 배포하면 브라우저가 무조건 새 파일을 받게 한다.
+// ES 모듈의 상대 import 도 같은 /v/<버전>/ 아래로 풀리므로 나중에 불러오는 화면 코드까지 함께 바뀐다.
+let VERSION;
+try {
+  VERSION = execSync('git rev-parse --short HEAD', { cwd: config.root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+} catch {
+  VERSION = Date.now().toString(36);
+}
+if (!config.isProd) VERSION = `${VERSION}-${Date.now().toString(36)}`; // 개발 중엔 재시작마다 새로
+
+const pageCache = new Map();
+function sendPage(res, file) {
+  let html = config.isProd ? pageCache.get(file) : null;
+  if (!html) {
+    html = fs.readFileSync(path.join(pub, file), 'utf8').replaceAll('__V__', VERSION);
+    pageCache.set(file, html);
+  }
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('html').send(html);
+}
+
+// 버전이 붙은 주소는 내용이 바뀌지 않으니 오래 캐시
+app.use('/v/:ver', express.static(pub, { index: false, immutable: true, maxAge: '365d' }));
+// 버전 없는 주소(사진·로고·지도 등)
 app.use(express.static(pub, {
   index: false,
-  cacheControl: false, // 아래 setHeaders 값을 그대로 쓰게
+  cacheControl: false,
   setHeaders: (res, file) => {
-    if (/\.(js|css|html)$/.test(file) && !file.includes(`${path.sep}vendor${path.sep}`)) res.setHeader('Cache-Control', 'no-cache');
-    else res.setHeader('Cache-Control', config.isProd ? 'public, max-age=86400' : 'no-cache');
+    res.setHeader('Cache-Control', /\.(js|css|html)$/.test(file) || !config.isProd ? 'no-cache' : 'public, max-age=86400');
   },
 }));
-app.get('/login', (_req, res) => res.sendFile(path.join(pub, 'login.html')));
-app.get('/s/:token', (_req, res) => res.sendFile(path.join(pub, 'signage.html'))); // 로그인 없는 사이니지
-app.get('/', (req, res) => (req.user ? res.sendFile(path.join(pub, 'index.html')) : res.redirect('/login')));
+app.get('/login', (_req, res) => sendPage(res, 'login.html'));
+app.get('/s/:token', (_req, res) => sendPage(res, 'signage.html')); // 로그인 없는 사이니지
+app.get('/', (req, res) => (req.user ? sendPage(res, 'index.html') : res.redirect('/login')));
 app.use((_req, res) => res.status(404).send('Not found'));
 
 app.listen(config.port, config.host, () => {
