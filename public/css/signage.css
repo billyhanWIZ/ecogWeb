@@ -9,9 +9,15 @@ body { word-break: keep-all; font-family: 'Wanted Sans Variable', 'Wanted Sans',
   background-size: 30vw 4vw;
 }
 header { display: flex; align-items: center; gap: 1.4vw; font-size: 1.7vw; color: #C4D9C6; }
-.clock { margin-left: auto; text-align: right; color: #fff; font-size: 1.5vw; line-height: 1.25; background: rgba(19, 66, 38, .78); padding: .7vw 1.3vw; border-radius: .8vw; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-.clock b { display: block; font-size: 3vw; font-weight: 650; letter-spacing: 0.01em; }
-.clock small { color: #C4D9C6; font-size: 1.25vw; }
+/* 가로 TV: 사진 속 세척기 몸통(로고 아래)에 몸통 폭만큼 겹쳐 놓는다. 16:9 기준으로 맞춘 위치 */
+.clock {
+  position: fixed; left: 74.2vw; top: 13.2vw; width: 17vw; z-index: 2;
+  text-align: center; color: #fff; line-height: 1.2;
+  background: rgba(19, 66, 38, .8); padding: .7vw .6vw .6vw; border-radius: .7vw;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.clock b { display: block; font-size: 2.5vw; font-weight: 650; letter-spacing: 0.02em; }
+.clock small { display: block; color: #C4D9C6; font-size: 1vw; margin-top: .2vw; }
 header img { height: 3.6vw; max-width: 18vw; object-fit: contain; }
 header img.custom { background: #fff; border-radius: .6vw; padding: .35vw .8vw; height: 3.4vw; }
 .sg > *:not(.photo) { position: relative; z-index: 1; }
@@ -43,7 +49,7 @@ footer { display: flex; justify-content: space-between; font-size: 1.15vw; color
   html, body { overflow: auto; }
   .sg { height: auto; min-height: 100%; padding: 6vw 6vw 10vw; gap: 6vw; }
   header { font-size: 4vw; flex-wrap: wrap; } header img { height: 9vw; max-width: 40vw; }
-  .clock { font-size: 3.4vw; background: none; padding: 0; } .clock b { font-size: 7vw; } .clock small { font-size: 3vw; }
+  .clock { position: static; width: auto; margin-left: auto; text-align: right; background: none; padding: 0; -webkit-backdrop-filter: none; backdrop-filter: none; } .clock b { font-size: 7vw; } .clock small { font-size: 3vw; }
   .lead, .sub { font-size: 4.6vw; } .big { font-size: 13vw; }
   .facts { grid-template-columns: 1fr 1fr; gap: 5vw; }
   .facts b { font-size: 8vw; } .facts span { font-size: 3.4vw; }

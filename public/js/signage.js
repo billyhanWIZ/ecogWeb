@@ -50,7 +50,7 @@ function tick() {
   clock.dateTime = t.toISOString();
   clock.innerHTML = '';
   const b = document.createElement('b');
-  b.textContent = `${hm(t)}:${pad(t.getSeconds())}`;
+  b.textContent = hm(t); // 시:분:초
   const small = document.createElement('small');
   small.textContent = `${t.getFullYear()}.${pad(t.getMonth() + 1)}.${pad(t.getDate())} (${DAYS[t.getDay()]})`;
   clock.append(b, small);
