@@ -65,7 +65,15 @@ app.use('/api', (_req, res) => res.status(404).json({ error: '없는 API 입니�
 app.use('/api', errorHandler);
 
 const pub = path.join(config.root, 'public');
-app.use(express.static(pub, { index: false, maxAge: config.isProd ? '1h' : 0 }));
+// 화면 코드(js·css·html)는 매번 서버에 바뀌었는지 묻는다(ETag) → 배포하면 바로 반영.
+// 사진·로고·지도·라이브러리처럼 거의 안 바뀌는 파일만 하루 캐시.
+app.use(express.static(pub, {
+  index: false,
+  setHeaders: (res, file) => {
+    if (/\.(js|css|html)$/.test(file) && !file.includes(`${path.sep}vendor${path.sep}`)) res.setHeader('Cache-Control', 'no-cache');
+    else res.setHeader('Cache-Control', config.isProd ? 'public, max-age=86400' : 'no-cache');
+  },
+}));
 app.get('/login', (_req, res) => res.sendFile(path.join(pub, 'login.html')));
 app.get('/s/:token', (_req, res) => res.sendFile(path.join(pub, 'signage.html'))); // 로그인 없는 사이니지
 app.get('/', (req, res) => (req.user ? res.sendFile(path.join(pub, 'index.html')) : res.redirect('/login')));
