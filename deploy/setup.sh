@@ -60,6 +60,12 @@ if ! command -v node >/dev/null || [[ "$(node -v | cut -c2- | cut -d. -f1)" -lt 
   apt-get install -y nodejs
 fi
 command -v pm2 >/dev/null || npm install -g pm2
+# nvm 등으로 설치된 Node 는 전역 bin 이 PATH 에 없을 수 있다 → /usr/local/bin 에 연결
+if ! command -v pm2 >/dev/null; then
+  ln -sf "$(npm prefix -g)/bin/pm2" /usr/local/bin/pm2
+  hash -r
+fi
+command -v pm2 >/dev/null && ok "pm2 $(pm2 -v)" || { fail "pm2 를 찾을 수 없습니다: npm prefix -g 확인"; exit 1; }
 # PDF 리포트(3단계)에 쓸 한글 폰트
 apt-get install -y fonts-noto-cjk >/dev/null 2>&1 || warn "fonts-noto-cjk 설치 실패 (PDF 단계 전에 다시 설치)"
 
