@@ -144,7 +144,8 @@ async function call(op, grid, base) {
   let body;
   try { body = JSON.parse(text); } catch { throw new Error(`기상청 응답 오류 (${res.status}): ${text.slice(0, 120).replace(/\s+/g, ' ')}`); }
   const head = body?.response?.header;
-  if (head?.resultCode !== '00') throw new Error(`기상청 ${op}: ${head?.resultCode} ${head?.resultMsg}`);
+  if (!head) throw new Error(`기상청 ${op} 응답 (${res.status}): ${text.slice(0, 200).replace(/\s+/g, ' ')}`);
+  if (head.resultCode !== '00') throw new Error(`기상청 ${op}: ${head.resultCode} ${head.resultMsg}`);
   return body.response.body?.items?.item || [];
 }
 
