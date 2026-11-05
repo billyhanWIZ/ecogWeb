@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { wrap, httpError } from '../lib/http.js';
 import { requireAuth, requireRole, isAdmin } from '../lib/auth.js';
 import { parsePeriod, todayKST, addDays, eachDay, weekday, isDate } from '../lib/dates.js';
-import { loadOrgs, userScope, scopedSubtree, pathName, userRoots, ancestors, canSeeTest } from '../lib/orgs.js';
+import { loadOrgs, userScope, scopedSubtree, pathName, userRoots, ancestors, canSeeTest, canManageDevices } from '../lib/orgs.js';
 import { dailyUsage, assignments, overlapDays } from '../lib/usage.js';
 import { getSettings, impact } from '../lib/settings.js';
 import { audit } from '../lib/audit.js';
@@ -34,8 +34,9 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
        FROM eg_device_site a LEFT JOIN eg_deviceinfo i ON i.deviceid = a.deviceid
        WHERE a.removed_on IS NULL AND a.site_sn IN (?)`, [sites])
     : [];
+  const manage = canManageDevices(tree, req.user);
   let unassigned = [];
-  if (req.user.role === 'SYSADMIN' && !req.query.org) {
+  if (manage && !req.query.org) {
     unassigned = await q(
       `SELECT i.deviceid, NULL site_sn, NULL display_name, NULL installed_on, NULL location_note, i.devicename,
               DATE_FORMAT(i.lastsignaldt,'%Y-%m-%d %H:%i:%s') lastsignaldt, GREATEST(TIMESTAMPDIFF(SECOND, i.lastsignaldt, NOW()), 0) ago,
@@ -128,7 +129,7 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
     return b.last30 - a.last30;
   });
 
-  res.json({ counts, devices: filtered, offlineSeconds: s.offline_seconds, canSeeTest: seeTest });
+  res.json({ counts, devices: filtered, offlineSeconds: s.offline_seconds, canSeeTest: seeTest, canManage: manage });
 }));
 
 /** 이 사용자가 이 장비를 볼 수 있는지 + 배정 이력 */
@@ -143,19 +144,25 @@ async function deviceAccess(req, deviceid) {
             DATE_FORMAT(removed_on,'%Y-%m-%d') removed_on, location_note, memo
      FROM eg_device_site WHERE deviceid = ? ORDER BY installed_on DESC, sn DESC`, [deviceid]);
   const scope = userScope(tree, req.user);
-  const visible = req.user.role === 'SYSADMIN' ? hist : hist.filter((h) => scope.has(h.site_sn));
-  if (req.user.role !== 'SYSADMIN' && !visible.length) throw httpError(404, '장비를 찾을 수 없습니다');
-  return { tree, info, hist: visible, scope };
+  const sys = req.user.role === 'SYSADMIN';
+  const visible = sys ? hist : hist.filter((h) => scope.has(h.site_sn));
+  const cur = hist.find((h) => !h.removed_on);
+  // 본사 관리자: 지금 미배정이거나 자기 조직 이하에 배정된 장비
+  const manage = !sys && canManageDevices(tree, req.user) && (!cur || scope.has(cur.site_sn));
+  if (!sys && !manage && !visible.length) throw httpError(404, '장비를 찾을 수 없습니다');
+  // 사용량을 범위로 자르지 않아도 되는지 (다른 조직에 배정된 적이 없음)
+  const allInScope = sys || hist.every((h) => scope.has(h.site_sn));
+  return { tree, info, hist: visible, scope, manage: sys || manage, allInScope };
 }
 
 r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
-  const { tree, info, hist, scope } = await deviceAccess(req, req.params.id);
+  const { tree, info, hist, scope, manage, allInScope } = await deviceAccess(req, req.params.id);
   const s = await getSettings();
   const period = parsePeriod({ from: req.query.from || addDays(todayKST(), -29), to: req.query.to });
   const viewRoot = userRoots(tree, req.user).length === 1 ? userRoots(tree, req.user)[0] : null;
 
   let daily;
-  if (req.user.role === 'SYSADMIN') {
+  if (allInScope) {
     daily = await q(`SELECT DATE_FORMAT(cleandate,'%Y-%m-%d') d, MAX(cleancount) cnt FROM eg_cleancount
                      WHERE deviceid = ? AND cleandate BETWEEN ? AND ? GROUP BY cleandate`, [info.deviceid, period.from, period.to]);
   } else {
@@ -181,7 +188,7 @@ r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
   }
   const total = await one('SELECT COALESCE(SUM(c),0) uses FROM (SELECT MAX(cleancount) c FROM eg_cleancount WHERE deviceid = ? GROUP BY cleandate) x', [info.deviceid]);
   const testRow = await one("SELECT DATE_FORMAT(marked_at,'%Y-%m-%d %H:%i') marked_at, note FROM eg_device_test WHERE deviceid = ?", [info.deviceid]);
-  const hidden = req.user.role === 'SYSADMIN'
+  const hidden = manage
     ? await one("SELECT DATE_FORMAT(hidden_at,'%Y-%m-%d %H:%i') hidden_at, reason FROM eg_device_hidden WHERE deviceid = ?", [info.deviceid])
     : null;
 
@@ -207,7 +214,7 @@ r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
     weekday: ['일', '월', '화', '수', '목', '금', '토'].map((n, i) => ({ day: n, avg: wdCnt[i] ? wdSum[i] / wdCnt[i] : 0 })),
     siteAvg,
     canEdit: isAdmin(req.user),
-    canAssign: req.user.role === 'SYSADMIN',
+    canAssign: manage,
     canMarkTest: canSeeTest(tree, req.user),
   });
 }));
@@ -235,11 +242,13 @@ async function syncLegacyGroup(run, tree, deviceid, siteSn) {
 }
 
 /** 설치처 배정·이설 */
-r.post('/devices/:id/assign', requireRole('SYSADMIN'), wrap(async (req, res) => {
+r.post('/devices/:id/assign', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
   const deviceid = req.params.id;
   const { siteSn, installedOn, displayName, locationNote, memo } = req.body || {};
-  const tree = await loadOrgs();
+  const { tree, manage, scope } = await deviceAccess(req, deviceid);
+  if (!manage) throw httpError(403, '권한이 없습니다');
   if (!tree.byId.has(Number(siteSn))) throw httpError(400, '설치처를 선택하세요');
+  if (req.user.role !== 'SYSADMIN' && !scope.has(Number(siteSn))) throw httpError(403, '자기 조직 아래 설치처만 고를 수 있습니다');
   const day = isDate(installedOn) ? installedOn : todayKST();
   const info = await one('SELECT deviceid, devicename FROM eg_deviceinfo WHERE deviceid = ?', [deviceid]);
   if (!info) throw httpError(404, '장비를 찾을 수 없습니다');
@@ -260,10 +269,11 @@ r.post('/devices/:id/assign', requireRole('SYSADMIN'), wrap(async (req, res) => 
 }));
 
 /** 철거 (배정 해제) */
-r.post('/devices/:id/unassign', requireRole('SYSADMIN'), wrap(async (req, res) => {
+r.post('/devices/:id/unassign', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
   const deviceid = req.params.id;
   const day = isDate(req.body?.removedOn) ? req.body.removedOn : todayKST();
-  const tree = await loadOrgs();
+  const { tree, manage } = await deviceAccess(req, deviceid);
+  if (!manage) throw httpError(403, '권한이 없습니다');
   await tx(async (run) => {
     const [cur] = await run('SELECT sn, DATE_FORMAT(installed_on,"%Y-%m-%d") installed_on FROM eg_device_site WHERE deviceid = ? AND removed_on IS NULL FOR UPDATE', [deviceid]);
     if (!cur) throw httpError(400, '배정된 설치처가 없습니다');
@@ -359,7 +369,8 @@ r.get('/test-devices', requireAuth, wrap(async (req, res) => {
 }));
 
 /** 목록에서 숨기기 (여러 대). 설치처에 배정된 장비는 먼저 철거해야 한다. 장비 테이블은 건드리지 않는다 */
-r.post('/devices/hide', requireRole('SYSADMIN'), wrap(async (req, res) => {
+r.post('/devices/hide', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
+  if (!canManageDevices(await loadOrgs(), req.user)) throw httpError(403, '권한이 없습니다');
   const ids = [...new Set((req.body?.deviceids || []).map(String))].slice(0, 500);
   if (!ids.length) throw httpError(400, '숨길 장비를 고르세요');
   const reason = String(req.body?.reason || '').trim().slice(0, 200) || null;
@@ -374,7 +385,8 @@ r.post('/devices/hide', requireRole('SYSADMIN'), wrap(async (req, res) => {
   res.json({ ok: true, count: known.length });
 }));
 
-r.post('/devices/unhide', requireRole('SYSADMIN'), wrap(async (req, res) => {
+r.post('/devices/unhide', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
+  if (!canManageDevices(await loadOrgs(), req.user)) throw httpError(403, '권한이 없습니다');
   const ids = [...new Set((req.body?.deviceids || []).map(String))].slice(0, 500);
   if (!ids.length) throw httpError(400, '되살릴 장비를 고르세요');
   const out = await q('DELETE FROM eg_device_hidden WHERE deviceid IN (?)', [ids]);

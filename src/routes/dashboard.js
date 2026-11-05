@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { wrap } from '../lib/http.js';
 import { requireAuth } from '../lib/auth.js';
 import { parsePeriod } from '../lib/dates.js';
-import { loadOrgs } from '../lib/orgs.js';
+import { loadOrgs, canManageDevices } from '../lib/orgs.js';
 import { buildStats, resolveSites, loadUsage } from '../lib/stats.js';
 import { signalStatus, currentDevices, cumulativeUses } from '../lib/usage.js';
 import { getSettings, impact } from '../lib/settings.js';
@@ -40,7 +40,7 @@ r.get('/dashboard', requireAuth, wrap(async (req, res) => {
   const cum = { uses: await cumulativeUses(sites) };
 
   let unassigned = null;
-  if (req.user.role === 'SYSADMIN') {
+  if (canManageDevices(tree, req.user)) {
     const u = await one(`SELECT COUNT(*) n FROM eg_deviceinfo i
       WHERE NOT EXISTS (SELECT 1 FROM eg_device_site a WHERE a.deviceid = i.deviceid AND a.removed_on IS NULL)
         AND NOT EXISTS (SELECT 1 FROM eg_device_hidden h WHERE h.deviceid = i.deviceid)

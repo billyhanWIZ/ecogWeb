@@ -96,3 +96,9 @@ export function canSeeTest(tree, user) {
   if (user?.role === 'SYSADMIN') return true;
   return user?.role === 'CUSTADMIN' && tree.roots.some((r) => r.sn === user.org_sn);
 }
+
+/** 미배정 장비 보기·배정·이설·철거·숨김: 시스템 관리자 또는 최상위 조직(본사)의 고객 관리자.
+ *  본사 관리자는 자기 조직 이하로만 배정할 수 있다 */
+export function canManageDevices(tree, user) {
+  return canSeeTest(tree, user);
+}

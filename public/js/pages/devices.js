@@ -1,4 +1,4 @@
-import { api, go, state } from '../app.js';
+import { api, go } from '../app.js';
 import { h, fmt, statusPill, modal, field, toast } from '../ui.js';
 import { openDevice } from './device-drawer.js';
 
@@ -6,7 +6,7 @@ export default async function devices(view, { params }) {
   const status = params.status || 'all';
   const kw = params.q || '';
   const d = await api(`/api/devices?status=${status}&q=${encodeURIComponent(kw)}`);
-  const isSys = state.me.user.role === 'SYSADMIN';
+  const isSys = !!d.canManage; // 시스템 관리자 또는 본사 관리자
   const reload = () => go('devices', { status, q: kw }, { replace: true });
   void field;
 

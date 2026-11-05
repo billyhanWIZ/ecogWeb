@@ -40,7 +40,7 @@ export default async function dashboard(view, { params }) {
   const [d, dv] = await Promise.all([api(`/api/dashboard?from=${p.from}&to=${p.to}`), api('/api/devices?status=drop')]);
   const k = d.kpi;
   const disposers = [];
-  const isSys = state.me.user.role === 'SYSADMIN';
+  const isSys = d.health?.unassigned != null; // 미배정 장비를 다루는 사용자(시스템·본사 관리자)
 
   const head = h('div', { class: 'head' },
     h('div', null, h('h1', null, '대시보드'), h('div', { class: 'faint', style: { fontSize: '13px', marginTop: '2px' } },
