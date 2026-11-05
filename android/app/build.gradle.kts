@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "com.jnwiz.ecog.tablet"
-        minSdk = 23 // 안드로이드 6.0 이상
+        minSdk = 22 // 안드로이드 5.1 이상 (기존 Unity 앱과 같음)
         targetSdk = 35
         versionCode = (System.getenv("ECOG_VERSION_CODE") ?: "1").toInt()
         versionName = System.getenv("ECOG_VERSION_NAME") ?: "1.0.0-dev"

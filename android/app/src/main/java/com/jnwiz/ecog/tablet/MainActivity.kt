@@ -67,7 +67,13 @@ class MainActivity : Activity() {
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (request.isForMainFrame) showOffline(error.description?.toString() ?: "")
+                if (Build.VERSION.SDK_INT >= 23 && request.isForMainFrame) showOffline(error.description?.toString() ?: "")
+            }
+
+            // 안드로이드 5.1
+            @Deprecated("Deprecated in Java")
+            override fun onReceivedError(view: WebView, errorCode: Int, description: String?, failingUrl: String?) {
+                if (Build.VERSION.SDK_INT < 23) showOffline(description ?: "")
             }
         }
 
@@ -121,6 +127,7 @@ class MainActivity : Activity() {
 
     // ── 권한 ─────────────
     private fun askPermissions() {
+        if (Build.VERSION.SDK_INT < 23) { afterPermissions(); return } // 5.1 은 설치 때 이미 허용
         val need = if (Build.VERSION.SDK_INT >= 31) {
             arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
         } else {

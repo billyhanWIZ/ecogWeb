@@ -89,7 +89,7 @@ DB 를 바꿀 때는 `sql/003_무엇.sql` 처럼 번호를 붙여 새 파일을 
 - **상태**: 10초마다 신호(`eg_deviceinfo.lastsignaldt`, 구 화면과 같은 의미)와 세척기 블루투스 연결 상태를 보냅니다. 장비 목록에 '세척기 연결 끊김'이 표시됩니다.
 - **설정**: 태블릿 화면 왼쪽 위 로고를 빠르게 5번 누르면 열립니다(다시 연결, 가장 가까운 세척기 다시 찾기, 등록 해제).
 - **시연**: `/t?sim=1` 로 열면 키보드 A/S/F 로 세척 신호를 흉내 냅니다.
-- **APK**: `android/` 가 바뀌어 main 에 올라가면 GitHub Actions 가 빌드해 https://github.com/billyhanWIZ/ecogWeb/releases/download/apk-latest/ecog-tablet.apk 에 올립니다. 서명 키는 저장소 Secrets(`ECOG_KEYSTORE_B64`, `ECOG_KEYSTORE_PASSWORD`)에만 둡니다. 안드로이드 6.0 이상.
+- **APK**: `android/` 가 바뀌어 main 에 올라가면 GitHub Actions 가 빌드해 https://github.com/billyhanWIZ/ecogWeb/releases/download/apk-latest/ecog-tablet.apk 에 올립니다. 서명 키는 저장소 Secrets(`ECOG_KEYSTORE_B64`, `ECOG_KEYSTORE_PASSWORD`)에만 둡니다. 안드로이드 5.1 이상(기존 Unity 앱과 같음).
 - **태블릿 설치**: APK 설치 → 권한(근처 기기·블루투스, 11 이하는 위치) 허용 → '다른 앱 위에 표시' 허용(재부팅 자동 실행) → 홈 버튼을 눌러 'eco.G 세척기'를 '항상' 홈 앱으로 고르면 키오스크처럼 씁니다.
 
 ## 기능 메모

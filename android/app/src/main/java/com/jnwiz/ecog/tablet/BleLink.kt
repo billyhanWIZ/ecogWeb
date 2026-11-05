@@ -228,7 +228,11 @@ class BleLink(private val ctx: Context, private val emit: (String) -> Unit) {
                 if (c.uuid == CHAR) data(g, v)
             }
         }
-        gatt = device.connectGatt(ctx, false, cb, BluetoothDevice.TRANSPORT_LE)
+        gatt = if (Build.VERSION.SDK_INT >= 23) {
+            device.connectGatt(ctx, false, cb, BluetoothDevice.TRANSPORT_LE)
+        } else {
+            device.connectGatt(ctx, false, cb)
+        }
         main.postDelayed({ if (g == gen && state != "connected") fail(g, "세척기가 응답하지 않습니다") }, CONNECT_TIMEOUT_MS)
     }
 
@@ -270,7 +274,8 @@ class BleLink(private val ctx: Context, private val emit: (String) -> Unit) {
     }
 
     // ── 준비 확인 ─────────────
-    private fun has(p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
+    // 안드로이드 5.1 은 설치할 때 권한을 다 받는다
+    private fun has(p: String) = Build.VERSION.SDK_INT < 23 || ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
 
     /** 문제가 있으면 화면에 보여 줄 문구, 없으면 null */
     private fun ready(): String? {
