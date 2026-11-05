@@ -1,6 +1,6 @@
 import { api, go } from '../app.js';
 import { h, fmt, statusPill, modal, field, toast } from '../ui.js';
-import { openDevice } from './device-drawer.js';
+import { openDevice, showCode } from './device-drawer.js';
 
 export default async function devices(view, { params }) {
   const status = params.status || 'all';
@@ -96,6 +96,7 @@ export default async function devices(view, { params }) {
   h('td', null, h('b', { style: { fontWeight: 600 } }, x.name), h('div', { class: 'faint', style: { fontSize: '12.5px' } }, x.deviceid)),
   h('td', null, x.sitePath || h('span', { class: 'faint' }, '미배정'), x.locationNote ? h('div', { class: 'faint', style: { fontSize: '12.5px' } }, x.locationNote) : null),
   h('td', null, statusPill(x.status, x.ago), x.test ? h('span', { class: 'pill never', style: { marginLeft: '4px' } }, '테스트') : null, x.drop ? h('span', { class: 'pill drop', style: { marginLeft: '4px' } }, '급감') : null,
+    x.ble && x.ble !== 'connected' && x.status === 'online' ? h('div', { class: 'pill off', style: { marginTop: '3px' } }, x.ble === 'off' ? '태블릿 블루투스 꺼짐' : '세척기 연결 끊김') : null,
     x.hidden ? h('div', { class: 'faint', style: { fontSize: '12.5px' } }, `${x.hiddenAt} 숨김${x.hiddenReason ? ` · ${x.hiddenReason}` : ''}`) : null,
     x.signalAfterHide ? h('div', { class: 'pill drop', style: { marginTop: '3px' } }, '숨긴 뒤 신호 들어옴') : null),
   h('td', { class: 'r' }, fmt.int(x.today)),
@@ -104,8 +105,24 @@ export default async function devices(view, { params }) {
   h('td', { class: 'r' }, fmt.int(x.last30)),
   h('td', { class: 'r faint' }, fmt.date(x.installedOn))));
 
+  const addBtn = isSys ? h('button', { class: 'btn primary', type: 'button', onclick: () => {
+    const name = h('input', { maxlength: 100, placeholder: '예: 경상국립대 1호기' });
+    modal('새 장비 추가', [
+      h('p', { style: { marginTop: 0 } }, '새 태블릿(웹·앱)을 붙일 세척기를 추가합니다. 장비 ID 와 태블릿 등록 코드를 만들어 드립니다. 추가한 장비는 미배정 탭에 있고, 설치처는 따로 배정하세요.'),
+      h('p', { class: 'note' }, '세척기(태블릿)를 바꾸는 경우에는 새로 추가하지 말고, 기존 장비 상세에서 \'태블릿 바꾸기\'를 누르세요. 세척 기록을 이어받습니다.'),
+      field('장비 이름', name),
+    ], {
+      submitLabel: '추가',
+      onSubmit: async () => {
+        const r = await api('/api/devices/new', { method: 'POST', body: { name: name.value } });
+        go('devices', { status: 'unassigned', q: '', open: r.deviceid });
+        setTimeout(() => showCode(r, name.value), 600); // 화면 이동이 끝난 뒤 (이동하면 열린 창이 닫힘)
+      },
+    });
+  } }, '새 장비 추가') : null;
+
   view.replaceChildren(
-    h('div', { class: 'head' }, h('div', null, h('h1', null, '장비')), search),
+    h('div', { class: 'head' }, h('div', null, h('h1', null, '장비')), h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, search, addBtn)),
     tabs,
     h('p', { class: 'muted', style: { margin: '0 0 12px', fontSize: '14px' } }, help),
     bulkBar || '',

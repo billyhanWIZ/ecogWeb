@@ -3,3 +3,11 @@ node_modules/
 /data/
 *.log
 .DS_Store
+
+# 안드로이드 앱 빌드 산출물·서명 키
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.jks
+*.keystore

@@ -7,6 +7,7 @@ import { dailyUsage, assignments, overlapDays } from '../lib/usage.js';
 import { getSettings, impact } from '../lib/settings.js';
 import { audit } from '../lib/audit.js';
 import { q, one, tx } from '../db.js';
+import { newDeviceId, issueCode } from '../lib/tablet.js';
 
 const r = Router();
 
@@ -30,6 +31,7 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
       `SELECT a.deviceid, a.site_sn, a.display_name, DATE_FORMAT(a.installed_on,'%Y-%m-%d') installed_on, a.location_note,
               i.devicename, DATE_FORMAT(i.lastsignaldt,'%Y-%m-%d %H:%i:%s') lastsignaldt,
               GREATEST(TIMESTAMPDIFF(SECOND, i.lastsignaldt, NOW()), 0) ago,
+              (SELECT tb.ble_state FROM eg_tablet tb WHERE tb.deviceid = a.deviceid AND tb.token_hash IS NOT NULL) ble,
               (SELECT 1 FROM eg_device_test t WHERE t.deviceid = a.deviceid) is_test
        FROM eg_device_site a LEFT JOIN eg_deviceinfo i ON i.deviceid = a.deviceid
        WHERE a.removed_on IS NULL AND a.site_sn IN (?)`, [sites])
@@ -42,6 +44,7 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
               DATE_FORMAT(i.lastsignaldt,'%Y-%m-%d %H:%i:%s') lastsignaldt, GREATEST(TIMESTAMPDIFF(SECOND, i.lastsignaldt, NOW()), 0) ago,
               DATE_FORMAT(h.hidden_at,'%Y-%m-%d %H:%i') hidden_at, h.reason hidden_reason,
               (h.deviceid IS NOT NULL AND i.lastsignaldt > h.hidden_at) signal_after_hide,
+              (SELECT tb.ble_state FROM eg_tablet tb WHERE tb.deviceid = i.deviceid AND tb.token_hash IS NOT NULL) ble,
               (SELECT 1 FROM eg_device_test t WHERE t.deviceid = i.deviceid) is_test
        FROM eg_deviceinfo i
        LEFT JOIN eg_device_hidden h ON h.deviceid = i.deviceid
@@ -94,6 +97,7 @@ r.get('/devices', requireAuth, wrap(async (req, res) => {
       hiddenReason: d.hidden_reason || null,
       signalAfterHide: !!Number(d.signal_after_hide || 0),
       test: !!d.is_test,
+      ble: d.ble || null, // 새 태블릿만: 세척기 블루투스 연결 상태
     };
   });
 
@@ -188,6 +192,12 @@ r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
   }
   const total = await one('SELECT COALESCE(SUM(c),0) uses FROM (SELECT MAX(cleancount) c FROM eg_cleancount WHERE deviceid = ? GROUP BY cleandate) x', [info.deviceid]);
   const testRow = await one("SELECT DATE_FORMAT(marked_at,'%Y-%m-%d %H:%i') marked_at, note FROM eg_device_test WHERE deviceid = ?", [info.deviceid]);
+  const tablet = await one(
+    `SELECT DATE_FORMAT(activated_at,'%Y-%m-%d %H:%i') activated_at, DATE_FORMAT(last_seen,'%Y-%m-%d %H:%i:%s') last_seen,
+            ble_state, DATE_FORMAT(ble_changed_at,'%Y-%m-%d %H:%i:%s') ble_changed_at, app_kind, app_version,
+            token_hash IS NOT NULL active, IF(reg_code_expires > NOW(), reg_code, NULL) code,
+            IF(reg_code_expires > NOW(), DATE_FORMAT(reg_code_expires,'%Y-%m-%d %H:%i'), NULL) code_expires
+     FROM eg_tablet WHERE deviceid = ?`, [info.deviceid]);
   const hidden = manage
     ? await one("SELECT DATE_FORMAT(hidden_at,'%Y-%m-%d %H:%i') hidden_at, reason FROM eg_device_hidden WHERE deviceid = ?", [info.deviceid])
     : null;
@@ -204,6 +214,16 @@ r.get('/devices/:id', requireAuth, wrap(async (req, res) => {
       totalUses: Number(total.uses),
       hidden: hidden ? { at: hidden.hidden_at, reason: hidden.reason } : null,
       test: testRow ? { at: testRow.marked_at, note: testRow.note } : null,
+      tablet: tablet && (tablet.active || manage) ? {
+        active: !!Number(tablet.active),
+        activatedAt: tablet.activated_at,
+        lastSeen: tablet.last_seen,
+        ble: tablet.ble_state,
+        bleChangedAt: tablet.ble_changed_at,
+        app: tablet.app_kind ? `${tablet.app_kind === 'apk' ? '앱' : '웹'}${tablet.app_version ? ` ${tablet.app_version}` : ''}` : null,
+        code: manage ? tablet.code : null,
+        codeExpires: manage ? tablet.code_expires : null,
+      } : null,
     },
     history: hist.map((h) => ({ ...h, sitePath: tree.byId.has(h.site_sn) ? pathName(tree, h.site_sn, viewRoot) : `(삭제된 조직 ${h.site_sn})` })),
     period,
@@ -229,6 +249,26 @@ r.patch('/devices/:id', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, r
     [displayName?.trim() || null, locationNote?.trim() || null, memo?.trim() || null, cur.sn]);
   await audit(req, 'device.update', 'device', req.params.id, { displayName, locationNote, memo });
   res.json({ ok: true });
+}));
+
+/** 새 장비 추가 (새 태블릿용). 장비 ID 를 만들고 태블릿 등록 코드를 함께 낸다 */
+r.post('/devices/new', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
+  if (!canManageDevices(await loadOrgs(), req.user)) throw httpError(403, '권한이 없습니다');
+  const name = String(req.body?.name || '').trim().slice(0, 100) || null;
+  const deviceid = await newDeviceId();
+  await q('INSERT INTO eg_deviceinfo (deviceid, devicename, lastsignaldt) VALUES (?, ?, NULL)', [deviceid, name]);
+  const code = await issueCode(deviceid, req.user.sn);
+  await audit(req, 'device.create', 'device', deviceid, { name });
+  res.json({ deviceid, ...code });
+}));
+
+/** 태블릿 등록 코드 발급 (새 태블릿을 붙이거나, 태블릿을 바꿀 때 기존 장비 ID·세척 기록을 이어받기) */
+r.post('/devices/:id/tablet-code', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
+  const { info, manage } = await deviceAccess(req, req.params.id);
+  if (!manage) throw httpError(403, '권한이 없습니다');
+  const code = await issueCode(info.deviceid, req.user.sn);
+  await audit(req, 'device.tabletCode', 'device', info.deviceid, null);
+  res.json({ deviceid: info.deviceid, ...code });
 }));
 
 /** 구 화면이 계속 보도록 eg_deviceinfo.mangegroup 을 맞춘다 (장비는 이 컬럼을 쓰지 않음) */

@@ -1,0 +1,77 @@
+# eco.G 세척기 태블릿 앱(APK) 빌드.
+# android/ 가 바뀌어 main 에 올라가면(또는 Actions 화면에서 직접 실행하면) APK 를 만들어
+# 릴리스 'apk-latest' 에 ecog-tablet.apk 로 올린다.
+#   받는 주소: https://github.com/billyhanWIZ/ecogWeb/releases/download/apk-latest/ecog-tablet.apk
+# 서명 키(저장소 Settings › Secrets and variables › Actions):
+#   ECOG_KEYSTORE_B64      키스토어 파일(.jks)을 base64 로 바꾼 글
+#   ECOG_KEYSTORE_PASSWORD 키스토어·키 비밀번호 (별칭은 ecog)
+# 키가 없으면 임시 키로 서명한다. 그 APK 는 다음 판으로 덮어 설치할 수 없으니 시험용으로만 쓴다.
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Signing key
+        env:
+          KS: ${{ secrets.ECOG_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/ecog.jks"
+            echo "ECOG_KEYSTORE_FILE=$RUNNER_TEMP/ecog.jks" >> "$GITHUB_ENV"
+            echo "SIGNED=release" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ECOG_KEYSTORE_B64 secret is missing - signing with a temporary debug key"
+            echo "SIGNED=debug" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build
+        working-directory: android
+        env:
+          ECOG_KEYSTORE_PASSWORD: ${{ secrets.ECOG_KEYSTORE_PASSWORD }}
+          ECOG_VERSION_CODE: ${{ github.run_number }}
+          ECOG_VERSION_NAME: 1.0.${{ github.run_number }}
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Collect APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk ecog-tablet.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ecog-tablet-1.0.${{ github.run_number }}
+          path: ecog-tablet.apk
+
+      - name: Publish to release apk-latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="eco.G 세척기 태블릿 앱 1.0.${{ github.run_number }} · 커밋 ${GITHUB_SHA::7} · 서명 ${SIGNED} · $(date -u +%Y-%m-%d)"
+          if ! gh release view apk-latest >/dev/null 2>&1; then
+            gh release create apk-latest --target "$GITHUB_SHA" --title "eco.G 태블릿 앱 (최신)" --notes "$NOTES" --prerelease
+          fi
+          gh release upload apk-latest ecog-tablet.apk --clobber
+          gh release edit apk-latest --notes "$NOTES"

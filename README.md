@@ -12,8 +12,8 @@
 브라우저 ──HTTPS──▶ nginx ──▶ ecoG 2.0 (Node.js, /opt/ecog, pm2) ──┘
 ```
 
-- 장비가 쓰는 `eg_cleancount`, `eg_deviceinfo` 는 그대로 읽기만 합니다.
-  예외는 하나: 장비를 배정·이설할 때 구 화면이 계속 보이도록 `eg_deviceinfo.mangegroup` 을 맞춥니다(장비는 이 컬럼을 쓰지 않음).
+- 장비(Unity 태블릿)가 쓰는 `eg_cleancount`, `eg_deviceinfo` 는 구조를 바꾸지 않습니다.
+  2.0 이 쓰는 곳: 배정·이설 때 `eg_deviceinfo.mangegroup` 동기화, 새 장비 추가, 새 태블릿(아래)의 신호와 세척 기록.
 - 사용자·조직·장비 배정은 새 테이블(`sql/001_new_tables.sql`)에 둡니다.
 - 같은 장비·같은 날짜 행이 여러 개면 MAX 하나만 셉니다(cleancount 는 그날 누적값).
 - 통계는 세척일 당시 배정된 설치처 기준입니다. 이설해도 과거 사용량은 이전 설치처에 남습니다.
@@ -22,13 +22,14 @@
 server.js            Express 진입점
 src/lib/             인증, 조직 트리, 통계 집계(stats.js), 설정
 src/lib/report.js    PDF 리포트 (HTML + SVG 차트 → Chromium)
-src/routes/          /api/* (auth, dashboard, stats, devices, orgs, users, settings, reports, signage)
+src/routes/          /api/* (auth, dashboard, stats, devices, orgs, users, settings, reports, signage, tablet)
 public/              화면 (빌드 없는 HTML + ES 모듈, ECharts)
 sql/                 번호 붙은 DB 변경 파일 (배포 때 자동 적용)
 scripts/             db-migrate.js, migrate-legacy.js (구 데이터 이관)
 deploy/              setup.sh(최초 1회), deploy.sh(평소), pm2 설정
 dev/                 로컬 개발용 구 테이블 재현 + 가짜 데이터
 docs/legacy/         운영 서버의 IpzSQL.xml (참고용)
+android/             세척기 태블릿 안드로이드 앱 (WebView + BLE). 빌드는 GitHub Actions
 ```
 
 ## 로컬 개발
@@ -70,6 +71,26 @@ bash deploy/deploy.sh --rollback               # 직전 배포로 되돌리기
 
 DB 를 바꿀 때는 `sql/003_무엇.sql` 처럼 번호를 붙여 새 파일을 추가합니다. 이미 적용한 파일은 고치지 않습니다.
 새 테이블을 만들면 전용 계정(ecog)에 그 테이블 권한(GRANT)도 줘야 합니다.
+
+## 세척기 태블릿 (새 프로그램)
+
+기존 Unity 태블릿은 그대로 둡니다. 새 태블릿은 웹 화면 `https://ecog.jnwiz.com/t` 를 씁니다.
+
+```
+세척 신호 송신부(ESP32 'ECOG', 변경 없음) ──BLE──▶ 태블릿 ──HTTPS /api/tablet/*──▶ ecoG 2.0 ──▶ MariaDB
+                                                  ├ 안드로이드 앱(APK): 가까운 세척기에 터치 없이 연결, 켜지면 자동 실행
+                                                  └ 크롬 웹: 페이지를 열 때마다 한 번 터치해서 세척기를 골라야 함
+```
+
+- **등록**: 장비 화면 › '새 장비 추가' → 장비 ID 와 8자리 등록 코드(24시간)가 나옵니다. 태블릿에서 코드를 넣으면 끝.
+- **태블릿 교체**: 기존 장비 상세 › '태블릿 바꾸기' → 새 코드를 새 태블릿에 넣으면 같은 장비 ID 로 세척 기록이 이어집니다. 기존 Unity 태블릿은 꼭 끄세요(같은 ID 로 두 대가 올리면 숫자가 섞임).
+- **세척 규칙**(Unity 와 같음): A 시작 → S 면 +1, F 면 세지 않음, A 뒤 7.5초 안에 S/F 가 없으면 +1. 세척 1건씩 `eg_clean_event` 에 남기고(uuid 로 중복 방지) 성공 건은 `eg_cleancount` 그날 누적값에 더합니다.
+- **인터넷이 끊겨도** 세척 기록은 태블릿에 쌓였다가 다시 연결되면 보냅니다. 화면은 서비스 워커로 저장돼 오프라인에서도 뜹니다.
+- **상태**: 10초마다 신호(`eg_deviceinfo.lastsignaldt`, 구 화면과 같은 의미)와 세척기 블루투스 연결 상태를 보냅니다. 장비 목록에 '세척기 연결 끊김'이 표시됩니다.
+- **설정**: 태블릿 화면 왼쪽 위 로고를 빠르게 5번 누르면 열립니다(다시 연결, 가장 가까운 세척기 다시 찾기, 등록 해제).
+- **시연**: `/t?sim=1` 로 열면 키보드 A/S/F 로 세척 신호를 흉내 냅니다.
+- **APK**: `android/` 가 바뀌어 main 에 올라가면 GitHub Actions 가 빌드해 https://github.com/billyhanWIZ/ecogWeb/releases/download/apk-latest/ecog-tablet.apk 에 올립니다. 서명 키는 저장소 Secrets(`ECOG_KEYSTORE_B64`, `ECOG_KEYSTORE_PASSWORD`)에만 둡니다. 안드로이드 6.0 이상.
+- **태블릿 설치**: APK 설치 → 권한(근처 기기·블루투스, 11 이하는 위치) 허용 → '다른 앱 위에 표시' 허용(재부팅 자동 실행) → 홈 버튼을 눌러 'eco.G 세척기'를 '항상' 홈 앱으로 고르면 키오스크처럼 씁니다.
 
 ## 기능 메모
 

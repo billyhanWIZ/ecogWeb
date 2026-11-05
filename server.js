@@ -18,6 +18,7 @@ import userRoutes from './src/routes/users.js';
 import settingRoutes from './src/routes/settings.js';
 import reportRoutes from './src/routes/reports.js';
 import signageRoutes from './src/routes/signage.js';
+import tabletRoutes from './src/routes/tablet.js';
 
 const app = express();
 app.set('trust proxy', 1); // nginx 뒤에서 https 판단
@@ -62,7 +63,7 @@ app.get('/api/health', async (_req, res) => {
     res.status(500).json({ ok: false });
   }
 });
-for (const r of [authRoutes, dashboardRoutes, statsRoutes, deviceRoutes, orgRoutes, userRoutes, settingRoutes, reportRoutes, signageRoutes]) app.use('/api', r);
+for (const r of [authRoutes, dashboardRoutes, statsRoutes, deviceRoutes, orgRoutes, userRoutes, settingRoutes, reportRoutes, signageRoutes, tabletRoutes]) app.use('/api', r);
 app.use('/api', (_req, res) => res.status(404).json({ error: '없는 API 입니다' }));
 app.use('/api', errorHandler);
 
@@ -101,6 +102,7 @@ app.use(express.static(pub, {
 }));
 app.get('/login', (_req, res) => sendPage(res, 'login.html'));
 app.get('/s/:token', (_req, res) => sendPage(res, 'signage.html')); // 로그인 없는 사이니지
+app.get(['/t', '/t/'], (_req, res) => sendPage(res, 'tablet.html')); // 세척기 태블릿 (웹·APK 공용)
 app.get('/', (req, res) => (req.user ? sendPage(res, 'index.html') : res.redirect('/login')));
 app.use((_req, res) => res.status(404).send('Not found'));
 
