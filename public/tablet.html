@@ -75,7 +75,7 @@
     <p id="doneSub" class="sub"></p>
   </section>
 
-  <!-- 설정: 왼쪽 위 로고를 5번 빠르게 누르면 열린다 -->
+  <!-- 설정: 왼쪽 위 로고를 3초 안에 5번 누르면 열린다 (한 번만 누르면 종료 확인) -->
   <dialog id="settings" class="settings">
     <h2>태블릿 설정</h2>
     <dl id="info"></dl>
@@ -87,8 +87,19 @@
     </div>
     <div class="row">
       <button id="sReset" class="btn danger hold" type="button">등록 해제 (3초 누르기)</button>
+      <button id="sExit" class="btn" type="button">앱 종료</button>
       <span class="grow"></span>
       <button id="sClose" class="btn primary" type="button">닫기</button>
+    </div>
+  </dialog>
+
+  <!-- 종료: 왼쪽 위 로고를 한 번 누르면 묻는다 -->
+  <dialog id="exitDlg" class="exit">
+    <h2>앱을 종료할까요?</h2>
+    <p id="exitMsg">종료하면 세척 횟수를 세지 않습니다.</p>
+    <div class="row">
+      <button id="exitNo" class="btn" type="button">취소</button>
+      <button id="exitYes" class="btn primary" type="button">종료</button>
     </div>
   </dialog>
 

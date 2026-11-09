@@ -70,6 +70,8 @@ r.get('/tablet/state', tabletAuth, wrap(async (req, res) => {
     name: cur?.display_name || info?.devicename || null,
     site: site ? { name: tree.byId.get(site).name, path: pathName(tree, site), top: chain[0]?.name || null, location: cur.location_note } : null,
     hasLogo: !!(site && inherited(tree, site, 'logo_path')),
+    // 배경 사진이 바뀌면 태블릿이 다시 받도록 파일 이름(업로드 시각 포함)을 버전으로 준다
+    bg: site ? inherited(tree, site, 'bg_path') || null : null,
     totals,
     factors: { co2PerUseG: s.co2_per_use_g, co2PerTreeKg: s.co2_per_tree_kg },
     weather,
@@ -85,6 +87,17 @@ r.get('/tablet/logo', tabletAuth, wrap(async (req, res) => {
   const full = file ? path.join(config.dataDir, 'logos', path.basename(file)) : null;
   if (!full || !fs.existsSync(full)) return res.status(204).end();
   res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+  res.setHeader('Cache-Control', 'private, max-age=600');
+  res.sendFile(full);
+}));
+
+/** 설치처(위로 올라가며) 태블릿 배경 사진. 없으면 204 (기본 숲 사진) */
+r.get('/tablet/background', tabletAuth, wrap(async (req, res) => {
+  const tree = await loadOrgs();
+  const cur = await one('SELECT site_sn FROM eg_device_site WHERE deviceid = ? AND removed_on IS NULL', [req.tablet.deviceid]);
+  const file = cur && tree.byId.has(cur.site_sn) ? inherited(tree, cur.site_sn, 'bg_path') : null;
+  const full = file ? path.join(config.dataDir, 'backgrounds', path.basename(file)) : null;
+  if (!full || !fs.existsSync(full)) return res.status(204).end();
   res.setHeader('Cache-Control', 'private, max-age=600');
   res.sendFile(full);
 }));

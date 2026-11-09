@@ -22,7 +22,8 @@ body {
 /* ── 평소 화면 ── */
 .main {
   display: grid; grid-template-rows: auto 1fr auto auto; gap: 2.6vmin; padding: 3.4vmin 4.6vmin 3vmin;
-  background: linear-gradient(100deg, rgba(10, 40, 22, .94) 0%, rgba(13, 50, 28, .86) 48%, rgba(19, 66, 38, .45) 100%), url('/tablet/forest.jpg') center / cover no-repeat;
+  --bg: url('/tablet/forest.jpg'); /* 설치처 배경 사진이 있으면 화면이 바꿔 넣는다 */
+  background: linear-gradient(100deg, rgba(10, 40, 22, .94) 0%, rgba(13, 50, 28, .86) 48%, rgba(19, 66, 38, .45) 100%), var(--bg) center / cover no-repeat;
 }
 .top { display: flex; align-items: center; gap: 2.2vmin; }
 .top .brand { height: 6.4vmin; }
@@ -105,6 +106,15 @@ body {
 .done .sub { margin: 0; font-size: 3.2vmin; color: #DDEBDD; }
 .done.fail { background: radial-gradient(circle at 50% 42%, #4E5F52 0%, #1D2B21 72%); }
 @keyframes pop { 0% { transform: scale(.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+/* ── 종료 확인 ── */
+.exit { border: 0; border-radius: 2vmin; padding: 3.4vmin 4vmin; width: min(90vw, 70vmin); color: #17261B; text-align: center; }
+.exit::backdrop { background: rgba(0, 0, 0, .55); }
+.exit h2 { margin: 0 0 1.2vmin; font-size: 4vmin; }
+.exit p { margin: 0 0 3vmin; font-size: 2.4vmin; color: #5B6B5F; }
+.exit .row { display: flex; gap: 1.6vmin; justify-content: center; }
+.exit .btn { font-size: 3vmin; padding: 2vmin 5vmin; background: #EEF4EF; }
+.exit .btn.primary { background: #1F7A45; color: #fff; }
 
 /* ── 설정 ── */
 .settings { border: 0; border-radius: 2vmin; padding: 3vmin 3.4vmin; width: min(92vw, 110vmin); color: #17261B; font-size: 2.2vmin; }

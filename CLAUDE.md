@@ -24,6 +24,7 @@
 - 신호: N 대기(1초마다), A 시작, S 정상(+1), F 5초 안에 끝남(세지 않음). A 뒤 7.5초 안에 S/F 가 없으면 +1(T). Unity 앱과 같은 규칙.
 - 앱은 가장 가까운(RSSI 가 가장 센) `ECOG` 에 터치 없이 붙고 주소를 기억한다. 송신부(ESP32) 펌웨어는 바꾸지 않는다.
 - 태블릿 인증은 등록 코드(8자리, 24시간) → 토큰(sha256 만 저장). 같은 장비 ID 로 새 태블릿을 등록하면 이전 토큰은 끊긴다.
+- 로고 한 번 = 종료 확인(EcogNative.exit, 예전 앱은 openSystemSettings), 5번 = 설정. 배경은 eg_org.bg_path(상위 상속, sql/005), /api/tablet/background.
 - 시연: `/t?sim=1` (키보드 A/S/F). APK 는 GitHub Actions(.github/workflows/android.yml)가 만들어 릴리스 apk-latest 에 올린다.
 
 ## 확인 방법

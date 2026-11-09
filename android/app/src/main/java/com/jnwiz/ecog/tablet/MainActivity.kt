@@ -105,6 +105,26 @@ class MainActivity : Activity() {
         @JavascriptInterface fun reconnect() { main.post { ble.reconnect() } }
         @JavascriptInterface fun forget() { main.post { ble.forget() } }
         @JavascriptInterface fun openSystemSettings() { main.post { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
+        @JavascriptInterface fun exit() { main.post { exitApp() } }
+    }
+
+    /**
+     * 앱 종료. 이 앱이 홈 앱으로 지정돼 있으면 닫아도 안드로이드가 곧바로 다시 띄우므로,
+     * 그때는 안드로이드 설정으로 나간다 (홈 앱을 바꾸거나 다른 작업을 할 수 있게).
+     */
+    private fun exitApp() {
+        if (isDefaultHome()) {
+            startActivity(Intent(Settings.ACTION_SETTINGS))
+            return
+        }
+        ble.close()
+        finishAndRemoveTask()
+    }
+
+    private fun isDefaultHome(): Boolean {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val info = packageManager.resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        return info?.activityInfo?.packageName == packageName
     }
 
     // ── 인터넷이 없을 때 ─────────────

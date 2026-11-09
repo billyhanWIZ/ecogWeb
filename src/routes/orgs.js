@@ -30,6 +30,21 @@ const upload = multer({
   },
 });
 
+// 태블릿 배경 사진 (설치처별, 비우면 상위 조직 것 → 기본 숲 사진)
+const bgDir = path.join(config.dataDir, 'backgrounds');
+fs.mkdirSync(bgDir, { recursive: true });
+const bgUpload = multer({
+  storage: multer.diskStorage({
+    destination: bgDir,
+    filename: (req, file, cb) => cb(null, `bg${req.params.sn}-${Date.now()}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = ['.png', '.jpg', '.jpeg', '.webp'].includes(path.extname(file.originalname).toLowerCase());
+    cb(ok ? null : httpError(400, 'JPG, PNG, WEBP 사진만 올릴 수 있습니다'), ok);
+  },
+});
+
 /** 고객 관리자는 자기 조직의 하위만 바꿀 수 있다 (자기 조직 자체의 이름·주소는 가능, 이동은 불가) */
 function assertEditable(tree, user, sn, { move = false } = {}) {
   if (user.role === 'SYSADMIN') return;
@@ -87,6 +102,8 @@ r.get('/orgs', requireAuth, wrap(async (req, res) => {
       weatherSet: o.lat != null && o.lng != null ? `${nearestName(Number(o.lat), Number(o.lng))} (${Number(o.lat).toFixed(4)}, ${Number(o.lng).toFixed(4)})` : null,
       weatherAuto: orgLocation(tree, o.sn)?.label || null,
       logoUrl: inherited(tree, o.sn, 'logo_path') ? `/api/orgs/${o.sn}/logo` : null,
+      bgUrl: inherited(tree, o.sn, 'bg_path') ? `/api/orgs/${o.sn}/background` : null,
+      bgInherited: !o.bg_path && !!inherited(tree, o.sn, 'bg_path'),
       devices: direct,
       devicesTotal: direct + kids.reduce((x, k) => x + k.devicesTotal, 0),
       children: kids,
@@ -181,6 +198,33 @@ r.delete('/orgs/:sn/logo', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req
   res.json({ ok: true });
 }));
 
+r.post('/orgs/:sn/background', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res, next) => {
+  const tree = await loadOrgs();
+  const sn = Number(req.params.sn);
+  if (!tree.byId.has(sn)) throw httpError(404, '조직을 찾을 수 없습니다');
+  assertEditable(tree, req.user, sn);
+  bgUpload.single('background')(req, res, async (err) => {
+    try {
+      if (err) throw err.status ? err : httpError(400, err.code === 'LIMIT_FILE_SIZE' ? '5MB 이하 사진만 올릴 수 있습니다' : err.message);
+      if (!req.file) throw httpError(400, '사진을 선택하세요');
+      await exec('UPDATE eg_org SET bg_path = ? WHERE sn = ?', [req.file.filename, sn]);
+      invalidateOrgs();
+      await audit(req, 'org.background', 'org', sn, { file: req.file.filename });
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  });
+}));
+
+r.delete('/orgs/:sn/background', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
+  const tree = await loadOrgs();
+  const sn = Number(req.params.sn);
+  assertEditable(tree, req.user, sn);
+  await exec('UPDATE eg_org SET bg_path = NULL WHERE sn = ?', [sn]);
+  invalidateOrgs();
+  await audit(req, 'org.background.remove', 'org', sn);
+  res.json({ ok: true });
+}));
+
 /** 사이니지 링크 발급(새로 발급하면 이전 링크는 끊긴다)·폐기 */
 r.post('/orgs/:sn/signage', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
   const tree = await loadOrgs();
@@ -216,6 +260,18 @@ r.get('/orgs/:sn/logo', requireAuth, wrap(async (req, res) => {
   if (!full || !fs.existsSync(full)) return res.redirect('/img/ecog-logo.png');
   res.setHeader('Cache-Control', 'private, max-age=300');
   res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox"); // SVG 안 스크립트 차단
+  res.sendFile(full);
+}));
+
+/** 태블릿 배경 미리보기 (자기 것이 없으면 상위 조직 것, 그래도 없으면 기본 숲 사진) */
+r.get('/orgs/:sn/background', requireAuth, wrap(async (req, res) => {
+  const tree = await loadOrgs();
+  const sn = Number(req.params.sn);
+  if (req.user.role !== 'SYSADMIN' && !userScope(tree, req.user).has(sn)) throw httpError(404, '없음');
+  const file = inherited(tree, sn, 'bg_path');
+  const full = file ? path.join(bgDir, path.basename(file)) : null;
+  if (!full || !fs.existsSync(full)) return res.redirect('/tablet/forest.jpg');
+  res.setHeader('Cache-Control', 'private, max-age=300');
   res.sendFile(full);
 }));
 

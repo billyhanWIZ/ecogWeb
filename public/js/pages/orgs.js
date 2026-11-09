@@ -75,6 +75,31 @@ export default async function orgs(view, { params }) {
         editable && o.logo_path ? h('button', { class: 'btn small danger', type: 'button', onclick: async () => { await api(`/api/orgs/${o.sn}/logo`, { method: 'DELETE' }); reload(o.sn); } }, '이 조직 로고 지우기') : null,
         h('span', { class: 'faint', style: { fontSize: '12.5px' } }, 'PNG·JPG·SVG, 1MB 이하'), file));
 
+    // 태블릿 배경 사진
+    const bgFile = h('input', { type: 'file', accept: '.png,.jpg,.jpeg,.webp', class: 'hidden' });
+    bgFile.addEventListener('change', async () => {
+      if (!bgFile.files[0]) return;
+      const fd = new FormData();
+      fd.append('background', bgFile.files[0]);
+      try {
+        await api(`/api/orgs/${o.sn}/background`, { method: 'POST', body: fd });
+        toast('태블릿 배경을 바꿨습니다. 태블릿에는 5분 안에 반영됩니다');
+        reload(o.sn);
+      } catch (ex) { toast(ex.message); }
+    });
+    const bg = h('section', { class: 'panel' },
+      h('header', null, h('h2', null, '태블릿 배경'), h('p', null, '세척기 태블릿 평소 화면의 배경 사진입니다. 비워 두면 상위 조직 사진을, 아무도 없으면 기본 숲 사진을 씁니다.')),
+      h('div', { class: 'body', style: { display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' } },
+        h('img', { src: o.bgUrl || '/tablet/forest.jpg', alt: `${o.name} 태블릿 배경`, style: { width: '192px', height: '120px', objectFit: 'cover', border: '1px solid var(--line)', borderRadius: '6px' } }),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+          h('span', { class: 'faint', style: { fontSize: '12.5px' } },
+            o.bg_path ? '이 조직의 사진' : o.bgInherited ? '상위 조직 사진을 쓰는 중' : '기본 숲 사진을 쓰는 중'),
+          h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+            editable ? h('button', { class: 'btn small', type: 'button', onclick: () => bgFile.click() }, '배경 사진 올리기') : null,
+            editable && o.bg_path ? h('button', { class: 'btn small danger', type: 'button', onclick: async () => { await api(`/api/orgs/${o.sn}/background`, { method: 'DELETE' }); reload(o.sn); } }, '이 조직 배경 지우기') : null),
+          h('span', { class: 'faint', style: { fontSize: '12.5px' } }, 'JPG·PNG·WEBP, 5MB 이하. 가로 사진(1920×1200 정도)이 좋고, 왼쪽에 글자가 얹히니 어둡거나 단순한 사진이 잘 보입니다')),
+        bgFile));
+
     const devs = h('section', { class: 'panel' },
       h('header', null, h('h2', null, `장비 ${fmt.int(o.devicesTotal)}대`), h('a', { href: `#/stats?by=${o.children.length ? 'org' : 'device'}&${o.children.length ? 'org' : 'site'}=${o.sn}` }, '이 조직 통계 보기')),
       h('div', { class: 'body' }, h('p', { class: 'muted', style: { margin: 0, fontSize: '14px' } },
@@ -102,7 +127,7 @@ export default async function orgs(view, { params }) {
 
     return h('div', { class: 'grid' },
       h('section', { class: 'panel' }, h('header', null, h('h2', null, selected.path)), h('div', { class: 'body' }, form)),
-      logo, devs, signage);
+      logo, bg, devs, signage);
   }
 
   function addChild(parent) {

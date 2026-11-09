@@ -79,6 +79,7 @@ async function loadState() {
     state.totalsDay = ymd(new Date());
     renderState();
     if (state.hasLogo) loadLogo();
+    loadBackground(state.bg);
     return true;
   } catch (e) {
     if (e instanceof AuthError) { unregister(e.message); return false; }
@@ -94,6 +95,26 @@ async function loadLogo() {
     $('custLogo').src = url;
     $('custLogo').hidden = false;
   } catch { /* 로고 없이 */ }
+}
+
+// 설치처 배경 사진: 바뀌었을 때만 다시 받는다. 없거나 못 받으면 기본 숲 사진
+let bgKey;
+let bgUrl = null;
+async function loadBackground(key) {
+  if (key === bgKey) return;
+  bgKey = key;
+  const set = (url) => {
+    if (bgUrl) URL.revokeObjectURL(bgUrl);
+    bgUrl = url;
+    if (url) $('main').style.setProperty('--bg', `url("${url}")`);
+    else $('main').style.removeProperty('--bg');
+  };
+  if (!key) { set(null); return; }
+  try {
+    const res = await fetch('/api/tablet/background', { headers: { Authorization: `Bearer ${auth.token}` }, cache: 'no-store' });
+    if (res.status !== 200) { set(null); return; }
+    set(URL.createObjectURL(await res.blob()));
+  } catch { bgKey = undefined; /* 다음 갱신 때 다시 */ }
 }
 
 function pending(today) {
@@ -300,12 +321,19 @@ function tick() {
 
 // ── 설정 ─────────────────
 function setupSettings() {
+  // 로고: 한 번 누르면 종료 확인, 3초 안에 5번 누르면 설정
   let taps = [];
+  let tapTimer = null;
   $('brand').addEventListener('click', () => {
     const now = Date.now();
     taps = taps.filter((x) => now - x < 3000).concat(now);
-    if (taps.length >= 5) { taps = []; openSettings(); }
+    clearTimeout(tapTimer);
+    if (taps.length >= 5) { taps = []; openSettings(); return; }
+    tapTimer = setTimeout(() => { if (taps.length === 1) openExit(); taps = []; }, 700);
   });
+  $('exitNo').addEventListener('click', () => $('exitDlg').close());
+  $('exitYes').addEventListener('click', () => { $('exitDlg').close(); exitApp(); });
+  $('sExit').addEventListener('click', () => { $('settings').close(); exitApp(); });
   $('sClose').addEventListener('click', () => $('settings').close());
   $('sReload').addEventListener('click', () => location.reload());
   $('sSystem').hidden = sig.kind !== 'apk';
@@ -322,6 +350,26 @@ function setupSettings() {
   const stop = () => { clearTimeout(holdT); $('sReset').classList.remove('holding'); };
   $('sReset').addEventListener('pointerdown', start);
   ['pointerup', 'pointerleave', 'pointercancel'].forEach((e) => $('sReset').addEventListener(e, stop));
+}
+
+let exitTimer = null;
+function openExit() {
+  if (phase !== 'idle' || $('settings').open) return;
+  $('exitMsg').textContent = sig.kind === 'apk'
+    ? '종료하면 세척 횟수를 세지 않습니다.'
+    : '종료하면 세척 횟수를 세지 않습니다. 브라우저 탭도 닫아 주세요.';
+  $('exitDlg').showModal();
+  clearTimeout(exitTimer);
+  exitTimer = setTimeout(() => { if ($('exitDlg').open) $('exitDlg').close(); }, 15_000); // 손님이 잘못 눌렀을 때
+}
+
+function exitApp() {
+  const n = window.EcogNative;
+  if (n && typeof n.exit === 'function') { n.exit(); return; } // 앱 1.0.4 이상: 앱을 닫는다
+  if (n && typeof n.openSystemSettings === 'function') { n.openSystemSettings(); return; } // 예전 앱: 안드로이드 설정으로 나간다
+  // 웹: 전체 화면을 풀고 창 닫기를 시도 (직접 연 탭은 브라우저가 막을 수 있다)
+  try { if (document.fullscreenElement) document.exitFullscreen(); } catch { /* 무시 */ }
+  window.close();
 }
 
 function openSettings() {
