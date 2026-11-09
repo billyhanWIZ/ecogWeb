@@ -99,6 +99,7 @@ class MainActivity : Activity() {
             .put("android", Build.VERSION.SDK_INT)
             .put("model", Build.MODEL)
             .put("saved", ble.savedAddress ?: JSONObject.NULL)
+            .put("home", isDefaultHome()) // 홈 앱(키오스크)으로 지정돼 있는지
             .toString()
 
         @JavascriptInterface fun start() { main.post { ble.start() } }
@@ -109,22 +110,46 @@ class MainActivity : Activity() {
     }
 
     /**
-     * 앱 종료. 이 앱이 홈 앱으로 지정돼 있으면 닫아도 안드로이드가 곧바로 다시 띄우므로,
-     * 그때는 안드로이드 설정으로 나간다 (홈 앱을 바꾸거나 다른 작업을 할 수 있게).
+     * 앱 종료.
+     * 홈 앱(키오스크)으로 지정돼 있으면 그냥 닫아도 안드로이드가 곧바로 다시 띄운다.
+     * 그래서 원래 홈 화면(삼성 One UI 홈 등)을 직접 열고 이 앱을 닫는다.
+     * 홈 앱 지정은 그대로라서 홈 버튼을 누르거나 태블릿을 다시 켜면 이 앱이 다시 뜬다.
      */
     private fun exitApp() {
         if (isDefaultHome()) {
-            startActivity(Intent(Settings.ACTION_SETTINGS))
-            return
+            val other = otherLauncher()
+            if (other != null) {
+                try {
+                    startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                        .setComponent(other).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (e: Exception) {
+                    startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+                    return
+                }
+            } else {
+                // 다른 홈 앱을 못 찾으면 홈 앱을 바꾸는 설정 화면으로
+                startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+                return
+            }
         }
         ble.close()
         finishAndRemoveTask()
     }
 
+    private fun homeIntent() = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+
     private fun isDefaultHome(): Boolean {
-        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        val info = packageManager.resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        val info = packageManager.resolveActivity(homeIntent(), PackageManager.MATCH_DEFAULT_ONLY)
         return info?.activityInfo?.packageName == packageName
+    }
+
+    /** 이 앱이 아닌 홈 앱 (태블릿 원래 홈 화면). 설정 앱 안의 대체 홈(FallbackHome)은 뺀다 */
+    private fun otherLauncher(): android.content.ComponentName? {
+        return packageManager.queryIntentActivities(homeIntent(), 0)
+            .map { it.activityInfo }
+            .filter { it.packageName != packageName && it.packageName != "android" && it.packageName != "com.android.settings" }
+            .map { android.content.ComponentName(it.packageName, it.name) }
+            .firstOrNull()
     }
 
     // ── 인터넷이 없을 때 ─────────────

@@ -50,6 +50,7 @@ class NativeAdapter extends Base {
     let info = {};
     try { info = JSON.parse(this.native.info() || '{}'); } catch { /* 옛 앱 */ }
     this.version = info.appVersion || '';
+    this.isHome = () => { try { return !!JSON.parse(this.native.info() || '{}').home; } catch { return false; } };
     window.__ecogNative = {
       onEvent: (json) => {
         let e;

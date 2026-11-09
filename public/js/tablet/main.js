@@ -73,7 +73,11 @@ function setupReg() {
 }
 
 // ── 서버 정보 ─────────────────
+// 태블릿을 켜자마자는 와이파이가 아직 안 붙어 있을 수 있다 (화면은 저장본으로 먼저 뜬다).
+// 화면 정보를 못 받았으면 받을 때까지 5초마다 다시 시도한다.
+let stateRetry = null;
 async function loadState() {
+  clearTimeout(stateRetry);
   try {
     state = await api('/api/tablet/state');
     state.totalsDay = ymd(new Date());
@@ -83,6 +87,7 @@ async function loadState() {
     return true;
   } catch (e) {
     if (e instanceof AuthError) { unregister(e.message); return false; }
+    if (!state) stateRetry = setTimeout(loadState, 5000);
     return false;
   }
 }
@@ -161,7 +166,8 @@ function showWeather(w) {
 }
 
 function setTotals(t) {
-  if (!t || !state) return;
+  if (!state) { loadState(); return; }
+  if (!t) return;
   state.totals = t;
   state.totalsDay = ymd(new Date());
   renderState();
@@ -289,6 +295,7 @@ async function heartbeat() {
   try {
     await api('/api/tablet/heartbeat', { method: 'POST', body: { ble, appKind: sig.kind === 'apk' ? 'apk' : 'web', appVersion: sig.kind === 'apk' ? `${sig.version}/${VERSION}` : VERSION } });
     setNet(true);
+    if (!state) loadState(); // 인터넷이 이제 붙었으면 화면 정보부터
     if (queue.list().length) sync();
   } catch (e) {
     if (e instanceof AuthError) unregister(e.message);
@@ -355,9 +362,11 @@ function setupSettings() {
 let exitTimer = null;
 function openExit() {
   if (phase !== 'idle' || $('settings').open) return;
-  $('exitMsg').textContent = sig.kind === 'apk'
-    ? '종료하면 세척 횟수를 세지 않습니다.'
-    : '종료하면 세척 횟수를 세지 않습니다. 브라우저 탭도 닫아 주세요.';
+  $('exitMsg').textContent = sig.kind !== 'apk'
+    ? '종료하면 세척 횟수를 세지 않습니다. 브라우저 탭도 닫아 주세요.'
+    : sig.isHome?.()
+      ? '종료하면 세척 횟수를 세지 않습니다. 홈 앱으로 지정돼 있어 홈 버튼을 누르거나 태블릿을 다시 켜면 다시 실행됩니다.'
+      : '종료하면 세척 횟수를 세지 않습니다.';
   $('exitDlg').showModal();
   clearTimeout(exitTimer);
   exitTimer = setTimeout(() => { if ($('exitDlg').open) $('exitDlg').close(); }, 15_000); // 손님이 잘못 눌렀을 때
