@@ -114,7 +114,7 @@ r.post('/tablet/heartbeat', tabletAuth, wrap(async (req, res) => {
              app_kind = ?, app_version = ?, user_agent = ?
            WHERE deviceid = ?`,
   [ble, ble, b.appKind === 'apk' ? 'apk' : 'web', String(b.appVersion || '').slice(0, 40) || null, String(req.get('user-agent') || '').slice(0, 200), id]);
-  res.json({ ok: true, serverTime: Date.now() });
+  res.json({ ok: true, serverTime: Date.now(), version: req.app.locals.version });
 }));
 
 /** 세척 기록 묶음. 인터넷이 끊겼던 동안 쌓인 것도 한꺼번에 온다 */

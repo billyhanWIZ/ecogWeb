@@ -293,8 +293,11 @@ async function heartbeat() {
   if (!auth.token) return;
   const ble = { connected: 'connected', connecting: 'connecting', off: 'off', unsupported: 'off' }[sig.state] || 'disconnected';
   try {
-    await api('/api/tablet/heartbeat', { method: 'POST', body: { ble, appKind: sig.kind === 'apk' ? 'apk' : 'web', appVersion: sig.kind === 'apk' ? `${sig.version}/${VERSION}` : VERSION } });
+    const hb = await api('/api/tablet/heartbeat', { method: 'POST', body: { ble, appKind: sig.kind === 'apk' ? 'apk' : 'web', appVersion: sig.kind === 'apk' ? `${sig.version}/${VERSION}` : VERSION } });
     setNet(true);
+    // 서버의 화면 판이 다르면(새로 배포했거나, 켜질 때 인터넷이 없어 저장본이 떴으면) 새로 불러온다.
+    // 세척 중이 아닐 때만. 보내지 못한 기록은 기기에 남아 있어 잃지 않는다.
+    if (hb?.version && hb.version !== VERSION && phase === 'idle' && !$('settings').open) { location.reload(); return; }
     if (!state) loadState(); // 인터넷이 이제 붙었으면 화면 정보부터
     if (queue.list().length) sync();
   } catch (e) {

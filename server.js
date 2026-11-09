@@ -78,6 +78,7 @@ try {
   VERSION = Date.now().toString(36);
 }
 if (!config.isProd) VERSION = `${VERSION}-${Date.now().toString(36)}`; // 개발 중엔 재시작마다 새로
+app.locals.version = VERSION; // 태블릿이 신호 응답으로 받아, 다르면 화면을 새로 불러온다
 
 const pageCache = new Map();
 function sendPage(res, file) {
