@@ -74,6 +74,26 @@ r.patch('/users/:sn', admin, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+/** 여러 명 한꺼번에 미사용 / 다시 사용. 자기 자신과 권한 밖 사용자가 섞이면 전체를 거절 */
+r.post('/users/active', admin, wrap(async (req, res) => {
+  const tree = await loadOrgs();
+  const value = req.body?.active === 'Y' ? 'Y' : req.body?.active === 'N' ? 'N' : null;
+  if (!value) throw httpError(400, '사용 여부를 정하세요');
+  const sns = [...new Set((req.body?.sns || []).map(Number).filter(Number.isInteger))].slice(0, 500);
+  if (!sns.length) throw httpError(400, '사용자를 고르세요');
+  if (sns.includes(req.user.sn)) throw httpError(400, '자기 자신의 사용 여부는 바꿀 수 없습니다');
+  const targets = await q('SELECT sn, login_id, role, org_sn, active FROM eg_user WHERE sn IN (?)', [sns]);
+  if (!targets.length) throw httpError(404, '사용자를 찾을 수 없습니다');
+  for (const t of targets) assertManageable(tree, req.user, t);
+  const change = targets.filter((t) => t.active !== value);
+  if (change.length) {
+    await exec('UPDATE eg_user SET active = ? WHERE sn IN (?)', [value, change.map((t) => t.sn)]);
+    await audit(req, value === 'N' ? 'user.deactivate' : 'user.activate', 'user', change.length === 1 ? change[0].sn : `${change.length}명`,
+      { loginIds: change.map((t) => t.login_id) });
+  }
+  res.json({ ok: true, count: change.length });
+}));
+
 r.post('/users/:sn/reset-password', admin, wrap(async (req, res) => {
   const tree = await loadOrgs();
   const target = await one('SELECT * FROM eg_user WHERE sn = ?', [req.params.sn]);
