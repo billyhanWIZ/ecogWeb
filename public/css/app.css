@@ -133,6 +133,11 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.t th { text-align: left; font-weight: 600; color: var(--ink-2); font-size: 13px; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 table.t td { padding: 9px 10px; border-bottom: 1px solid var(--line-2); vertical-align: middle; }
 table.t th.r, table.t td.r { text-align: right; }
+table.t th.sort { cursor: pointer; user-select: none; }
+table.t th.sort:hover { color: var(--ink); background: #F2F7F0; }
+table.t th.sort .arr { display: inline-block; min-width: 1em; margin-left: 3px; font-size: 10px; color: var(--leaf); }
+table.t th.sort[aria-sort="none"] .arr::after { content: '↕'; color: var(--line); font-size: 11px; }
+table.t th.sort[aria-sort="none"]:hover .arr::after { color: var(--ink-2); }
 table.t tbody tr.click { cursor: pointer; }
 table.t tbody tr.click:hover td { background: #F2F7F0; }
 table.t tfoot td { font-weight: 650; border-top: 1px solid var(--line); border-bottom: 0; }

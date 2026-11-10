@@ -2,6 +2,22 @@ import { api, go } from '../app.js';
 import { h, fmt, statusPill, modal, field, toast } from '../ui.js';
 import { openDevice, showCode } from './device-drawer.js';
 
+// 헤더 정렬 상태 (탭마다 따로 기억, 페이지를 새로 열면 기본 순서)
+const sortBy = {};
+const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
+const STATUS_RANK = { online: 0, offline: 1, never: 2 };
+// [키, 머리글, 오른쪽 정렬, 처음 누를 때 방향, 값 비교]
+const COLS = [
+  ['name', '장비', false, 1, (a, b) => collator.compare(a.name || '', b.name || '') || collator.compare(a.deviceid, b.deviceid)],
+  ['site', '설치처', false, 1, (a, b) => (!a.sitePath - !b.sitePath) || collator.compare(a.sitePath || '', b.sitePath || '')],
+  ['status', '상태', false, 1, (a, b) => (STATUS_RANK[a.status] ?? 1) - (STATUS_RANK[b.status] ?? 1) || (a.ago ?? Infinity) - (b.ago ?? Infinity)],
+  ['today', '오늘', true, -1, (a, b) => (a.today || 0) - (b.today || 0)],
+  ['yesterday', '어제', true, -1, (a, b) => (a.yesterday || 0) - (b.yesterday || 0)],
+  ['last7', '7일', true, -1, (a, b) => (a.last7 || 0) - (b.last7 || 0)],
+  ['last30', '30일', true, -1, (a, b) => (a.last30 || 0) - (b.last30 || 0)],
+  ['installed', '설치일', true, -1, (a, b) => collator.compare(a.installedOn || '', b.installedOn || '')],
+];
+
 export default async function devices(view, { params }) {
   const status = params.status || 'all';
   const kw = params.q || '';
@@ -87,7 +103,8 @@ export default async function devices(view, { params }) {
   const checkCell = (x) => (selectable ? h('td', { onclick: (e) => e.stopPropagation(), style: { width: '28px' } },
     h('input', { type: 'checkbox', 'data-dev': x.deviceid, 'aria-label': `${x.name} 선택`, onchange: (e) => { if (e.target.checked) picked.add(x.deviceid); else picked.delete(x.deviceid); syncPicked(); } })) : null);
 
-  const rows = d.devices.map((x) => h('tr', {
+  const rowOf = new Map();
+  d.devices.forEach((x) => rowOf.set(x, h('tr', {
     class: 'click', tabindex: '0',
     onclick: () => openDevice(x.deviceid, null, reload),
     onkeydown: (e) => { if (e.key === 'Enter') openDevice(x.deviceid, null, reload); },
@@ -103,7 +120,39 @@ export default async function devices(view, { params }) {
   h('td', { class: 'r' }, fmt.int(x.yesterday)),
   h('td', { class: 'r' }, fmt.int(x.last7)),
   h('td', { class: 'r' }, fmt.int(x.last30)),
-  h('td', { class: 'r faint' }, fmt.date(x.installedOn))));
+  h('td', { class: 'r faint' }, fmt.date(x.installedOn)))));
+
+  // 머리글을 누르면 정렬: 한 번 → 처음 방향, 두 번 → 반대, 세 번 → 기본 순서
+  const tbody = h('tbody');
+  const ths = COLS.map(([key, label, right, first]) => {
+    const th = h('th', { class: `sort${right ? ' r' : ''}`, tabindex: '0', role: 'columnheader', title: '눌러서 정렬' }, label, h('span', { class: 'arr', 'aria-hidden': 'true' }));
+    const toggle = () => {
+      const cur = sortBy[status];
+      if (!cur || cur.key !== key) sortBy[status] = { key, dir: first };
+      else if (cur.dir === first) sortBy[status] = { key, dir: -first };
+      else delete sortBy[status];
+      applySort();
+    };
+    th.addEventListener('click', toggle);
+    th.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    th.dataset.key = key;
+    return th;
+  });
+  const applySort = () => {
+    const cur = sortBy[status];
+    const list = [...d.devices]; // 서버가 준 순서가 기본
+    if (cur) {
+      const cmp = COLS.find((c) => c[0] === cur.key)[4];
+      list.sort((a, b) => cmp(a, b) * cur.dir);
+    }
+    tbody.replaceChildren(...list.map((x) => rowOf.get(x)));
+    ths.forEach((th) => {
+      const on = cur && th.dataset.key === cur.key;
+      th.setAttribute('aria-sort', on ? (cur.dir > 0 ? 'ascending' : 'descending') : 'none');
+      th.querySelector('.arr').textContent = on ? (cur.dir > 0 ? '▲' : '▼') : '';
+    });
+  };
+  applySort();
 
   const addBtn = isSys ? h('button', { class: 'btn primary', type: 'button', onclick: () => {
     const name = h('input', { maxlength: 100, placeholder: '예: 경상국립대 1호기' });
@@ -128,9 +177,8 @@ export default async function devices(view, { params }) {
     bulkBar || '',
     h('section', { class: 'panel' }, h('div', { class: 'body tablewrap', style: { paddingTop: '10px' } }, d.devices.length
       ? h('table', { class: 't' },
-        h('thead', null, h('tr', null, selectable ? h('th') : null, h('th', null, '장비'), h('th', null, '설치처'), h('th', null, '상태'),
-          h('th', { class: 'r' }, '오늘'), h('th', { class: 'r' }, '어제'), h('th', { class: 'r' }, '7일'), h('th', { class: 'r' }, '30일'), h('th', { class: 'r' }, '설치일'))),
-        h('tbody', null, rows))
+        h('thead', null, h('tr', null, selectable ? h('th') : null, ths)),
+        tbody)
       : h('div', { class: 'empty' }, kw ? `'${kw}'에 맞는 장비가 없습니다` : '해당하는 장비가 없습니다'))));
 
   if (params.open) openDevice(params.open, null, reload);
