@@ -69,7 +69,8 @@ r.patch('/users/:sn', admin, wrap(async (req, res) => {
   await exec('UPDATE eg_user SET name = ?, email = ?, role = ?, org_sn = ?, active = ? WHERE sn = ?', [
     String(b.name ?? target.name).trim(), (b.email ?? target.email)?.trim() || null, role,
     role === 'SYSADMIN' ? null : Number(orgSn), b.active === 'N' ? 'N' : b.active === 'Y' ? 'Y' : target.active, target.sn]);
-  await audit(req, 'user.update', 'user', target.sn, b);
+  const nextActive = b.active === 'N' ? 'N' : b.active === 'Y' ? 'Y' : target.active;
+  await audit(req, nextActive !== target.active ? (nextActive === 'N' ? 'user.deactivate' : 'user.activate') : 'user.update', 'user', target.sn, b);
   res.json({ ok: true });
 }));
 

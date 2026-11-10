@@ -9,7 +9,7 @@ export const ROLES = ['SYSADMIN', 'CUSTADMIN', 'VIEWER'];
 export const ROLE_LABEL = { SYSADMIN: '시스템 관리자', CUSTADMIN: '고객 관리자', VIEWER: '조회자' };
 
 export async function login(loginId, password) {
-  const u = await one("SELECT *, (locked_until IS NOT NULL AND locked_until > NOW()) AS is_locked FROM eg_user WHERE login_id = ? AND active = 'Y'", [loginId]);
+  const u = await one("SELECT *, (locked_until IS NOT NULL AND locked_until > NOW()) AS is_locked FROM eg_user WHERE login_id = ?", [loginId]);
   const fail = () => Object.assign(new Error('아이디 또는 비밀번호가 맞지 않습니다'), { status: 401 });
   if (!u) {
     await bcrypt.compare(String(password), DUMMY_HASH); // 없는 아이디도 같은 시간이 걸리게
@@ -25,6 +25,11 @@ export async function login(loginId, password) {
       `UPDATE eg_user SET fail_count = ?, locked_until = IF(? >= ?, DATE_ADD(NOW(), INTERVAL ? MINUTE), NULL) WHERE sn = ?`,
       [n >= LOCK_AFTER ? 0 : n, n, LOCK_AFTER, LOCK_MINUTES, u.sn]);
     throw fail();
+  }
+  // 미사용 사용자: 비밀번호가 맞을 때만 알려 준다 (틀리면 위와 같은 문구라 아이디 존재 여부가 드러나지 않음)
+  if (u.active !== 'Y') {
+    await exec('UPDATE eg_user SET fail_count = 0, locked_until = NULL WHERE sn = ?', [u.sn]);
+    throw Object.assign(new Error('사용 권한이 만료된 사용자입니다. 관리자에게 문의하세요'), { status: 403, code: 'inactive' });
   }
   await exec('UPDATE eg_user SET fail_count = 0, locked_until = NULL, last_login_at = NOW() WHERE sn = ?', [u.sn]);
   return u;

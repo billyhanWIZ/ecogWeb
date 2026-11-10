@@ -6,19 +6,24 @@ export default async function users(view) {
   const d = await api('/api/users');
   const reload = () => go('users', {}, { replace: true });
 
-  const rows = d.users.map((u) => h('tr', { style: u.active === 'N' ? { opacity: 0.5 } : null },
+  const meSn = state.me?.user?.sn;
+  const off = d.users.filter((u) => u.active === 'N').length;
+  const rows = d.users.map((u) => h('tr', { class: u.active === 'N' ? 'inactive' : null },
     h('td', null, h('b', { style: { fontWeight: 600 } }, u.name), h('div', { class: 'faint', style: { fontSize: '12.5px' } }, u.login_id)),
     h('td', null, u.roleLabel),
     h('td', null, u.role === 'SYSADMIN' ? h('span', { class: 'faint' }, '전체') : u.orgPath || '–'),
     h('td', null, u.last_login_at || h('span', { class: 'faint' }, '없음'), u.must_change_pw === 'Y' ? h('div', { class: 'faint', style: { fontSize: '12.5px' } }, '임시 비밀번호') : null),
-    h('td', null, u.active === 'Y' ? '사용' : '중지'),
-    h('td', { class: 'r' },
+    h('td', null, u.active === 'Y' ? h('span', { class: 'pill on' }, '사용') : h('span', { class: 'pill never' }, '미사용')),
+    h('td', { class: 'r', style: { whiteSpace: 'nowrap' } },
       h('button', { class: 'btn small', onclick: () => edit(u) }, '수정'), ' ',
-      h('button', { class: 'btn small', onclick: () => reset(u) }, '비밀번호 초기화'))));
+      h('button', { class: 'btn small', onclick: () => reset(u) }, '비밀번호 초기화'), ' ',
+      u.sn === meSn ? null : u.active === 'Y'
+        ? h('button', { class: 'btn small danger', onclick: () => setActive(u, 'N') }, '미사용 처리')
+        : h('button', { class: 'btn small primary', onclick: () => setActive(u, 'Y') }, '다시 사용'))));
 
   view.replaceChildren(
     h('div', { class: 'head' }, h('div', null, h('h1', null, '사용자'),
-      h('p', { class: 'faint', style: { margin: '2px 0 0', fontSize: '13px' } }, '사용자는 지정한 조직과 그 아래만 볼 수 있습니다.')),
+      h('p', { class: 'faint', style: { margin: '2px 0 0', fontSize: '13px' } }, `사용자는 지정한 조직과 그 아래만 볼 수 있습니다. 미사용 사용자는 로그인할 수 없습니다.${off ? ` (미사용 ${off}명)` : ''}`)),
     h('button', { class: 'btn primary', onclick: () => edit(null) }, '사용자 추가')),
     h('section', { class: 'panel' }, h('div', { class: 'body tablewrap', style: { paddingTop: '10px' } },
       h('table', { class: 't' },
@@ -34,7 +39,7 @@ export default async function users(view) {
     const role = h('select', null, d.roles.map((r) => h('option', { value: r.value, selected: (u?.role || 'VIEWER') === r.value }, r.label)));
     const orgBtn = h('button', { class: 'btn', type: 'button', style: { width: '100%', justifyContent: 'flex-start' } }, u?.orgPath || '조직 고르기');
     orgBtn.addEventListener('click', () => pickOrg((o) => { orgSn = o.sn; orgBtn.textContent = o.path; }, { title: '볼 수 있는 조직', selectedSn: orgSn }));
-    const active = h('select', null, h('option', { value: 'Y', selected: u?.active !== 'N' }, '사용'), h('option', { value: 'N', selected: u?.active === 'N' }, '중지'));
+    const active = h('select', null, h('option', { value: 'Y', selected: u?.active !== 'N' }, '사용'), h('option', { value: 'N', selected: u?.active === 'N' }, '미사용'));
     const orgField = h('div', { class: 'field' }, h('label', null, '볼 수 있는 조직'), orgBtn, h('span', { class: 'hint' }, '이 조직과 그 아래 조직만 보입니다'));
     const syncRole = () => orgField.classList.toggle('hidden', role.value === 'SYSADMIN');
     role.addEventListener('change', syncRole);
@@ -44,7 +49,7 @@ export default async function users(view) {
       field('역할', role, '고객 관리자는 자기 조직의 조직·사용자를 관리할 수 있고, 조회자는 보기만 합니다'),
       orgField,
       field('이메일', email),
-      isNew ? null : field('상태', active),
+      isNew || u.sn === meSn ? null : field('상태', active, '미사용으로 바꾸면 바로 로그아웃되고, 로그인할 때 \'사용 권한이 만료된 사용자\'라고 나옵니다'),
     ], {
       submitLabel: isNew ? '추가' : '저장',
       onSubmit: async () => {
@@ -58,6 +63,18 @@ export default async function users(view) {
         }
         reload();
       },
+    });
+  }
+
+  function setActive(u, value) {
+    const save = async () => {
+      await api(`/api/users/${u.sn}`, { method: 'PATCH', body: { active: value } });
+      toast(value === 'N' ? `${u.name}님을 미사용으로 바꿨습니다` : `${u.name}님을 다시 사용하게 했습니다`);
+      reload();
+    };
+    if (value === 'Y') { save().catch((e) => toast(e.message)); return; }
+    modal('미사용 처리', h('p', null, `${u.name}(${u.login_id})을(를) 미사용으로 바꿉니다. 바로 로그아웃되고, 로그인하면 '사용 권한이 만료된 사용자'라고 나옵니다. 기록은 그대로 남고 '다시 사용'으로 되돌릴 수 있습니다.`), {
+      submitLabel: '미사용 처리', danger: true, onSubmit: save,
     });
   }
 

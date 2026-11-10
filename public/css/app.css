@@ -140,6 +140,7 @@ table.t th.sort[aria-sort="none"] .arr::after { content: '↕'; color: var(--lin
 table.t th.sort[aria-sort="none"]:hover .arr::after { color: var(--ink-2); }
 table.t tbody tr.click { cursor: pointer; }
 table.t tbody tr.click:hover td { background: #F2F7F0; }
+table.t tbody tr.inactive td:not(:last-child) { opacity: .55; }
 table.t tfoot td { font-weight: 650; border-top: 1px solid var(--line); border-bottom: 0; }
 .tablewrap { overflow-x: auto; }
 
