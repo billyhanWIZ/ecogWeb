@@ -1,5 +1,5 @@
 import { api, go } from '../app.js';
-import { h, fmt, statusPill, modal, field, toast } from '../ui.js';
+import { h, fmt, statusPill, modal, field, toast, today } from '../ui.js';
 import { openDevice, showCode } from './device-drawer.js';
 
 // 헤더 정렬 상태 (탭마다 따로 기억, 페이지를 새로 열면 기본 순서)
@@ -45,19 +45,19 @@ export default async function devices(view, { params }) {
   const help = {
     all: '설치처에 배정된 장비입니다. 30일 사용량이 많은 순입니다.',
     online: `${d.offlineSeconds}초 안에 신호가 들어온 장비입니다.`,
-    offline: '신호가 끊긴 장비입니다. 오래 끊긴 순으로, 현장 점검 목록으로 쓰세요.',
+    offline: `신호가 끊긴 장비입니다. 오래 끊긴 순으로, 현장 점검 목록으로 쓰세요.${isSys ? ' 더 이상 쓰지 않는 장비는 골라서 철거하고 숨기세요.' : ''}`,
     drop: '최근 2주 평균은 꾸준한데 어제 한 번도 쓰이지 않은 장비입니다. 고장이나 위치 이동을 확인하세요.',
     unassigned: '전원을 켜면 스스로 등록되지만 아직 설치처가 없는 장비입니다. 눌러서 설치처를 배정하세요. 방금 켠 장비가 맨 위에 있습니다. 시험용·폐기 장비는 골라서 숨기세요.',
     hidden: '목록에서 숨긴 장비입니다. 장비 기록은 그대로 남아 있고, 숨긴 뒤 다시 신호가 들어오면 표시됩니다.',
     test: '테스트용으로 지정한 장비입니다. 대시보드·통계·리포트·사이니지 숫자에서 빠집니다. 사용량은 \'테스트 장비\' 메뉴에서 따로 봅니다.',
   }[status];
 
-  // 미배정·숨김 탭: 여러 대 골라서 숨기기 / 되살리기
-  const selectable = (isSys && (status === 'unassigned' || status === 'hidden')) || (d.canSeeTest && status === 'test');
+  // 미배정·무신호·숨김 탭: 여러 대 골라서 숨기기 / 되살리기 (무신호는 철거하고 숨김)
+  const selectable = (isSys && (status === 'unassigned' || status === 'offline' || status === 'hidden')) || (d.canSeeTest && status === 'test');
   const picked = new Set();
   const countEl = h('span', { class: 'muted', style: { fontSize: '14px' } }, '');
-  const actBtn = h('button', { class: `btn small ${status === 'unassigned' ? 'danger' : 'primary'}`, disabled: true, type: 'button' },
-    status === 'hidden' ? '선택한 장비 다시 보이기' : status === 'test' ? '선택한 장비 테스트 해제' : '선택한 장비 숨기기');
+  const actBtn = h('button', { class: `btn small ${status === 'unassigned' || status === 'offline' ? 'danger' : 'primary'}`, disabled: true, type: 'button' },
+    status === 'hidden' ? '선택한 장비 다시 보이기' : status === 'test' ? '선택한 장비 테스트 해제' : status === 'offline' ? '선택한 장비 철거하고 숨기기' : '선택한 장비 숨기기');
   const testBtn = status === 'unassigned' ? h('button', { class: 'btn small', disabled: true, type: 'button' }, '선택한 장비 테스트로 지정') : null;
   const syncPicked = () => {
     countEl.textContent = picked.size ? `${picked.size}대 선택` : '';
@@ -82,21 +82,26 @@ export default async function devices(view, { params }) {
         .then((r) => { toast(`${r.count}대를 다시 보이게 했습니다`); reload(); }).catch((e) => toast(e.message));
       return;
     }
-    const reason = h('input', { maxlength: 200, placeholder: '예: 시험용 장비, 폐기' });
-    modal(`장비 ${ids.length}대 숨기기`, [
-      h('p', { style: { marginTop: 0 } }, '새 화면의 장비 목록에서만 빠집니다. 세척 기록과 장비 등록 정보는 그대로 남고, 숨김 탭에서 언제든 되살릴 수 있습니다.'),
+    const reason = h('input', { maxlength: 200, placeholder: status === 'offline' ? '예: 철거, 고장 폐기' : '예: 시험용 장비, 폐기' });
+    const off = status === 'offline';
+    const date = off ? h('input', { type: 'date', value: today(), max: today() }) : null;
+    modal(off ? `장비 ${ids.length}대 철거하고 숨기기` : `장비 ${ids.length}대 숨기기`, [
+      off
+        ? h('p', { style: { marginTop: 0 } }, '설치처에서 철거한 뒤 목록에서 숨깁니다. 철거일까지의 사용 기록은 원래 설치처에 그대로 남고, 대시보드·조직의 장비 수와 무신호 수에서 빠집니다. 숨김 탭에서 되살릴 수 있고, 다시 쓰려면 설치처를 배정하세요.')
+        : h('p', { style: { marginTop: 0 } }, '새 화면의 장비 목록에서만 빠집니다. 세척 기록과 장비 등록 정보는 그대로 남고, 숨김 탭에서 언제든 되살릴 수 있습니다.'),
+      off ? field('철거일', date) : null,
       field('사유', reason),
     ], {
-      submitLabel: '숨기기', danger: true,
+      submitLabel: off ? '철거하고 숨기기' : '숨기기', danger: true,
       onSubmit: async () => {
-        const r = await api('/api/devices/hide', { method: 'POST', body: { deviceids: ids, reason: reason.value } });
-        toast(`${r.count}대를 숨겼습니다`);
+        const r = await api('/api/devices/hide', { method: 'POST', body: { deviceids: ids, reason: reason.value, ...(off ? { removeOn: date.value } : {}) } });
+        toast(r.removed ? `${r.removed}대를 철거하고 숨겼습니다` : `${r.count}대를 숨겼습니다`);
         reload();
       },
     });
   });
   const bulkBar = selectable ? h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' } },
-    status === 'unassigned' ? h('button', { class: 'btn small', type: 'button', onclick: () => pickWhere((x) => x.last30 === 0 && (x.ago == null || x.ago > 30 * 86400)) }, '30일 넘게 신호·사용 없는 장비 고르기') : null,
+    status === 'unassigned' || status === 'offline' ? h('button', { class: 'btn small', type: 'button', onclick: () => pickWhere((x) => x.last30 === 0 && (x.ago == null || x.ago > 30 * 86400)) }, '30일 넘게 신호·사용 없는 장비 고르기') : null,
     h('button', { class: 'btn small', type: 'button', onclick: () => pickWhere(() => true) }, '모두 고르기'),
     h('button', { class: 'btn small', type: 'button', onclick: () => { picked.clear(); syncPicked(); } }, '선택 해제'),
     countEl, h('span', { style: { flex: 1 } }), testBtn, actBtn) : null;

@@ -408,21 +408,45 @@ r.get('/test-devices', requireAuth, wrap(async (req, res) => {
   });
 }));
 
-/** 목록에서 숨기기 (여러 대). 설치처에 배정된 장비는 먼저 철거해야 한다. 장비 테이블은 건드리지 않는다 */
+/** 목록에서 숨기기 (여러 대). 장비 테이블은 건드리지 않는다.
+ *  설치처에 배정된 장비는 removeOn(철거일)을 함께 보내면 철거한 뒤 숨긴다 (무신호 탭). 없으면 거절 */
 r.post('/devices/hide', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
-  if (!canManageDevices(await loadOrgs(), req.user)) throw httpError(403, '권한이 없습니다');
+  const tree = await loadOrgs();
+  if (!canManageDevices(tree, req.user)) throw httpError(403, '권한이 없습니다');
   const ids = [...new Set((req.body?.deviceids || []).map(String))].slice(0, 500);
   if (!ids.length) throw httpError(400, '숨길 장비를 고르세요');
   const reason = String(req.body?.reason || '').trim().slice(0, 200) || null;
-  const assigned = await q('SELECT DISTINCT deviceid FROM eg_device_site WHERE removed_on IS NULL AND deviceid IN (?)', [ids]);
-  if (assigned.length) throw httpError(400, `설치처에 배정된 장비는 먼저 철거하세요: ${assigned.map((a) => a.deviceid).join(', ')}`);
+  const removeOn = req.body?.removeOn == null ? null : String(req.body.removeOn);
+  if (removeOn != null && !isDate(removeOn)) throw httpError(400, '철거일을 확인하세요');
   const known = await q('SELECT deviceid FROM eg_deviceinfo WHERE deviceid IN (?)', [ids]);
   if (!known.length) throw httpError(404, '장비를 찾을 수 없습니다');
-  await q(`INSERT INTO eg_device_hidden (deviceid, hidden_by, reason) VALUES ?
-           ON DUPLICATE KEY UPDATE hidden_at = NOW(), hidden_by = VALUES(hidden_by), reason = VALUES(reason)`,
-  [known.map((k) => [k.deviceid, req.user.sn, reason])]);
-  await audit(req, 'device.hide', 'device', known.length === 1 ? known[0].deviceid : `${known.length}대`, { deviceids: known.map((k) => k.deviceid), reason });
-  res.json({ ok: true, count: known.length });
+  const knownIds = known.map((k) => k.deviceid);
+  const sys = req.user.role === 'SYSADMIN';
+  const scope = sys ? null : userScope(tree, req.user);
+
+  let removed = 0;
+  await tx(async (run) => {
+    const cur = await run(`SELECT sn, deviceid, site_sn, DATE_FORMAT(installed_on,'%Y-%m-%d') installed_on
+                           FROM eg_device_site WHERE removed_on IS NULL AND deviceid IN (?) FOR UPDATE`, [knownIds]);
+    if (cur.length) {
+      if (removeOn == null) throw httpError(400, `설치처에 배정된 장비는 먼저 철거하세요: ${cur.map((a) => a.deviceid).join(', ')}`);
+      const out = cur.filter((c) => !sys && !scope.has(c.site_sn));
+      if (out.length) throw httpError(403, `자기 조직 밖에 배정된 장비가 있습니다: ${out.map((a) => a.deviceid).join(', ')}`);
+      const early = cur.filter((c) => removeOn <= c.installed_on);
+      if (early.length) throw httpError(400, `철거일은 설치일보다 뒤여야 합니다: ${early.map((a) => `${a.deviceid}(설치 ${a.installed_on})`).join(', ')}`);
+      for (const c of cur) {
+        await run('UPDATE eg_device_site SET removed_on = ? WHERE sn = ?', [removeOn, c.sn]);
+        await syncLegacyGroup(run, tree, c.deviceid, null);
+      }
+      removed = cur.length;
+    }
+    await run(`INSERT INTO eg_device_hidden (deviceid, hidden_by, reason) VALUES ?
+               ON DUPLICATE KEY UPDATE hidden_at = NOW(), hidden_by = VALUES(hidden_by), reason = VALUES(reason)`,
+    [knownIds.map((id) => [id, req.user.sn, reason])]);
+  });
+  await audit(req, 'device.hide', 'device', knownIds.length === 1 ? knownIds[0] : `${knownIds.length}대`,
+    { deviceids: knownIds, reason, ...(removed ? { removedOn: removeOn, removed } : {}) });
+  res.json({ ok: true, count: knownIds.length, removed });
 }));
 
 r.post('/devices/unhide', requireRole('SYSADMIN', 'CUSTADMIN'), wrap(async (req, res) => {
